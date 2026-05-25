@@ -402,7 +402,8 @@ class Dashboard:
         left.grid(row=1, column=0, sticky="ns")
         left.rowconfigure(0, weight=1)
 
-        self.tree = ttk.Treeview(left, width=42, show="tree")
+        self.tree = ttk.Treeview(left, show="tree")
+        self.tree.column("#0", width=330, minwidth=260, stretch=True)
         self.tree.grid(row=0, column=0, sticky="ns")
         tree_scroll = ttk.Scrollbar(left, orient=VERTICAL, command=self.tree.yview)
         tree_scroll.grid(row=0, column=1, sticky="ns")
