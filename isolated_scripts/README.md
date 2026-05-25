@@ -10,7 +10,40 @@ and print their instruction. Set `SEND_TRANSACTION=true` to broadcast.
 
 - `jupiter/quote.py` - Get Jupiter quote.
 - `jupiter/swap_transaction.py` - Get Jupiter swap transaction.
+- `launchpads/dexscreener_pair.py` - Get DexScreener pair by chain and pair.
+- `launchpads/dexscreener_search.py` - Search DexScreener pairs.
+- `launchpads/dexscreener_token_pairs.py` - Get DexScreener token pairs.
+- `launchpads/generic_get.py` - Call any launchpad or LP GET endpoint.
+- `launchpads/generic_post_json.py` - Call any launchpad or LP JSON POST endpoint.
 - `metadata/derive_metadata_pda.py` - Derive Metaplex metadata PDA.
+- `meteora/api_get.py` - Call a Meteora GET endpoint.
+- `meteora/damm_v2_pools.py` - List Meteora DAMM v2 pools.
+- `meteora/dlmm_pair_all.py` - List Meteora DLMM pairs.
+- `meteora/dlmm_pools.py` - List Meteora DLMM pools.
+- `meteora/sdk_action_notes.py` - Print Meteora SDK-only action notes.
+- `orca/api_get.py` - Call an Orca GET endpoint.
+- `orca/get_pool.py` - Get Orca Whirlpool by address.
+- `orca/list_pools.py` - List Orca Whirlpool pools.
+- `orca/sdk_action_notes.py` - Print Orca SDK-only action notes.
+- `orca/search_pools.py` - Search Orca Whirlpool pools.
+- `raydium/api_v3_get.py` - Call a Raydium API v3 GET endpoint.
+- `raydium/build_swap_base_in_transaction.py` - Build Raydium exact-input swap transaction.
+- `raydium/build_swap_base_out_transaction.py` - Build Raydium exact-output swap transaction.
+- `raydium/list_mints.py` - List Raydium mint metadata.
+- `raydium/mint_price.py` - Get Raydium mint prices.
+- `raydium/pool_by_ids.py` - Get Raydium pools by IDs.
+- `raydium/pool_by_mints.py` - Find Raydium pools by token mints.
+- `raydium/pool_list.py` - List Raydium pools.
+- `raydium/priority_fee.py` - Get Raydium priority fee suggestions.
+- `raydium/sign_and_send_built_transactions.py` - Sign and optionally send Raydium-built transactions.
+- `raydium/swap_quote_base_in.py` - Get Raydium swap quote for exact input.
+- `raydium/swap_quote_base_out.py` - Get Raydium swap quote for exact output.
+- `raydium_launchlab/forum_api_get.py` - Call Raydium LaunchLab Forum API with ray-token.
+- `raydium_launchlab/forum_api_post.py` - Post to Raydium LaunchLab Forum API with ray-token.
+- `raydium_launchlab/history_api_get.py` - Call a Raydium LaunchLab History API endpoint.
+- `raydium_launchlab/launch_status.py` - Get Raydium LaunchLab launch status.
+- `raydium_launchlab/mint_api_get.py` - Call a Raydium LaunchLab Mint API endpoint.
+- `raydium_launchlab/request_auth_token.py` - Request a Raydium LaunchLab auth token.
 - `rpc/get_account_info.py` - Get raw account info.
 - `rpc/get_account_info_json_parsed.py` - Get parsed account info.
 - `rpc/get_balance.py` - Get SOL balance.

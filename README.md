@@ -27,9 +27,12 @@ Donations support continued open tooling, documentation, and practical Solana ed
 - `Roots/transferauthonly.py` - transfer only Metaplex metadata update authority.
 - `Roots/MoveAuth.py` - authority transfer script with retry handling.
 - `Roots/config.py` - shared `.env` loader and typed Solana config helpers.
-- `isolated_scripts/` - 80 standalone one-function scripts grouped by RPC, solders, system, SPL Token, Token-2022, Jupiter, and metadata.
+- `isolated_scripts/` - 113 standalone one-function Python scripts grouped by RPC, solders, system, SPL Token, Token-2022, Jupiter, Raydium, LaunchLab, Meteora, Orca, launchpad discovery, and metadata.
+- `ts_actions/` - TypeScript SDK actions for flows that need official SDKs, including Raydium LaunchLab create/buy/sell, Meteora DLMM swaps and positions, and Orca Whirlpool swaps.
+- `package.json` / `tsconfig.json` - optional Node SDK runtime for `ts_actions/`.
 - `generate_isolated_scripts.py` - catalog generator for rebuilding the isolated script suite.
 - `solana_tools_dashboard.py` - clean desktop dashboard that loads `.env`, runs actions silently, and streams output into an in-app terminal.
+- `install_dependencies.py` - dependency checker/installer that can be launched from the dashboard terminal.
 - `build_exe.ps1` / `build_exe.bat` - build `Solana Tools.exe` with PyInstaller.
 - `solana_cli_python_functions.txt` - broad 2026 Solana CLI, Python, SPL Token, and Token-2022 reference.
 
@@ -62,6 +65,14 @@ Copy-Item .env.example .env
 
 The real `.env` is ignored by git. Keep it local.
 
+Install the optional TypeScript SDK dependencies when you want SDK-only launchpad and LP execution:
+
+```powershell
+npm install
+```
+
+The dashboard can also do this from `Install/Repair Dependencies`.
+
 ## Environment Variables
 
 Required runtime values live in `.env`:
@@ -87,6 +98,7 @@ Required runtime values live in `.env`:
 - `JUPITER_QUOTE_URL`
 - `JUPITER_SWAP_URL`
 - `COINGECKO_SOL_PRICE_URL`
+- Raydium, LaunchLab, Meteora, Orca, TypeScript SDK, and generic LP API values shown in `.env.example`
 
 Use `.env.example` as the committed template. Put real secrets only in `.env`.
 
@@ -117,9 +129,26 @@ python .\isolated_scripts\solders\derive_pda.py
 python .\isolated_scripts\spl_token\derive_ata.py
 python .\isolated_scripts\token_2022\get_accounts_by_owner.py
 python .\isolated_scripts\jupiter\quote.py
+python .\isolated_scripts\raydium\swap_quote_base_in.py
+python .\isolated_scripts\meteora\dlmm_pair_all.py
+python .\isolated_scripts\orca\search_pools.py
 ```
 
 Read-only scripts run immediately. Scripts that build transactions default to dry-run mode and print the instruction. Set `SEND_TRANSACTION=true` in your environment only when you want to broadcast.
+
+## Raydium And LP Launchpads
+
+The dashboard includes practical LP and launchpad actions that can be performed safely from Python and, where needed, official TypeScript SDKs:
+
+- Raydium API v3 reads: mint metadata, mint prices, pool lists, pool lookup by IDs, and pool lookup by mint pair.
+- Raydium Trade API: exact-input quotes, exact-output quotes, build swap transactions, and sign/send built transactions when explicitly enabled.
+- Raydium LaunchLab: Mint API reads, History API reads, launch status checks, auth-token request helper, and signed Forum API GET/POST helpers.
+- Meteora: DLMM pair discovery, DLMM pool reads, DAMM v2 pool reads, and a note action for SDK-only swap/position workflows.
+- Orca: Whirlpool list, search, and pool detail reads, plus a note action for SDK-only swap/position workflows.
+- Generic launchpad helpers: DexScreener search, token-pair lookup, pair lookup, generic GET, and dry-run-first JSON POST.
+- TypeScript SDK actions: Raydium LaunchLab create/buy/sell, Meteora DLMM swap/create position/close position, and Orca Whirlpool swap.
+
+SDK actions stay dry-run-first. They quote or build the transaction, print the planned action in the in-app terminal, and only broadcast when `SEND_TRANSACTION=true` is enabled in `.env` or checked in the dashboard.
 
 ## Solana Tools Dashboard
 
@@ -129,7 +158,9 @@ The dashboard gives everyday users a clean local interface for the same script a
 python .\solana_tools_dashboard.py
 ```
 
-The app discovers scripts in `isolated_scripts/` and `Roots/`, loads `.env`, runs each selected action in a hidden child process, and displays the full run in an in-app terminal. Actions that build transactions remain in dry-run mode unless `SEND_TRANSACTION=true` is enabled in the dashboard.
+The app discovers scripts in `isolated_scripts/`, `Roots/`, and `ts_actions/`, loads `.env`, runs each selected action in a hidden child process, and displays the full run in an in-app terminal. Actions that build transactions remain in dry-run mode unless `SEND_TRANSACTION=true` is enabled in the dashboard.
+
+The packaged exe is self-contained for Python dashboard use. TypeScript SDK actions require Node.js and the npm packages from `package.json`; the `Install/Repair Dependencies` button checks that setup and prompts before installing anything.
 
 Build the Windows executable:
 
@@ -181,6 +212,7 @@ This repository ignores:
 - existing `wallets.env`, `tokens.env`, and `tokens.env.txt` files.
 - `trading_history.json`.
 - Python caches and local virtual environments.
+- `node_modules/` and local npm cache folders.
 
 Before committing, verify no secrets are staged:
 

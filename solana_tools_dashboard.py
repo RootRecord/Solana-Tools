@@ -6,6 +6,7 @@ import os
 import queue
 import re
 import runpy
+import shutil
 import subprocess
 import sys
 import threading
@@ -59,7 +60,10 @@ def load_dotenv(root: Path) -> dict[str, str]:
 
 def run_script_mode(script_path: str) -> int:
     try:
-        runpy.run_path(script_path, run_name="__main__")
+        path = Path(script_path)
+        if path.suffix != ".py":
+            raise RuntimeError(f"Unsupported in-process script type: {path.suffix}")
+        runpy.run_path(str(path), run_name="__main__")
         return 0
     except SystemExit as exc:
         return int(exc.code or 0)
@@ -69,6 +73,8 @@ def run_script_mode(script_path: str) -> int:
 
 
 def parse_description(path: Path) -> str:
+    if path.suffix == ".ts":
+        return path.stem.replace("_", " ").title()
     try:
         tree = ast.parse(path.read_text(encoding="utf-8"))
         return (ast.get_docstring(tree) or "").splitlines()[0].strip()
@@ -79,6 +85,7 @@ def parse_description(path: Path) -> str:
 def parse_env_names(path: Path) -> tuple[str, ...]:
     text = path.read_text(encoding="utf-8")
     names = set(re.findall(r'env(?:_int|_float|_bool|_list)?\(\s*["\']([A-Z0-9_]+)["\']', text))
+    names.update(re.findall(r'env(?:BigInt|Bool|Int|Json)?\(\s*["\']([A-Z0-9_]+)["\']', text))
     names.update(re.findall(r'pubkey\(\s*["\']([A-Z0-9_]+)["\']', text))
     names.update(re.findall(r'keypair\(\s*["\']([A-Z0-9_]+)["\']', text))
     ignored = {"MESSAGE", "ENCODING"}
@@ -86,16 +93,31 @@ def parse_env_names(path: Path) -> tuple[str, ...]:
 
 
 def discover_actions() -> list[Action]:
-    root = bundled_root()
-    candidates: list[Path] = []
-    for folder_name in ["isolated_scripts", "Roots"]:
-        folder = root / folder_name
-        if folder.exists():
-            candidates.extend(path for path in folder.rglob("*.py") if "__pycache__" not in path.parts)
+    roots = [app_root(), bundled_root()]
+    candidates: list[tuple[Path, Path]] = []
+    seen: set[str] = set()
+    seen_labels: set[str] = set()
+    for root in roots:
+        for folder_name, extension in [("isolated_scripts", "*.py"), ("Roots", "*.py"), ("ts_actions", "*.ts")]:
+            folder = root / folder_name
+            if not folder.exists():
+                continue
+            for path in folder.rglob(extension):
+                if "__pycache__" in path.parts or path.name == "common.ts":
+                    continue
+                label_key = (Path(folder_name) / path.relative_to(folder)).with_suffix("").as_posix()
+                if label_key in seen_labels:
+                    continue
+                key = path.resolve().as_posix().lower()
+                if key in seen:
+                    continue
+                seen.add(key)
+                seen_labels.add(label_key)
+                candidates.append((root, path))
 
     excluded = {"config.py", "__init__.py"}
     actions: list[Action] = []
-    for path in sorted(candidates):
+    for root, path in sorted(candidates, key=lambda item: item[1].as_posix()):
         if path.name in excluded:
             continue
         relative = path.relative_to(root)
@@ -144,6 +166,7 @@ class Dashboard:
         ttk.Label(toolbar, textvariable=self.status_var).pack(side=LEFT, padx=(0, 16))
         ttk.Button(toolbar, text="Reload .env", command=self.reload_env).pack(side=LEFT, padx=4)
         ttk.Button(toolbar, text="Open .env", command=self.open_env_file).pack(side=LEFT, padx=4)
+        ttk.Button(toolbar, text="Install/Repair Dependencies", command=self.run_dependency_installer).pack(side=LEFT, padx=4)
         ttk.Checkbutton(toolbar, text="SEND_TRANSACTION=true", variable=self.send_transaction_var).pack(side=LEFT, padx=12)
 
         left = ttk.Frame(self.root, padding=(8, 0, 4, 8))
@@ -250,10 +273,15 @@ class Dashboard:
             messagebox.showwarning(APP_NAME, "Another action is already running.")
             return
 
-        runner_args = self._runner_args(action)
+        try:
+            runner_args = self._runner_args(action.path)
+        except RuntimeError as exc:
+            messagebox.showerror(APP_NAME, str(exc))
+            return
         env = os.environ.copy()
         env.update(self.env_values)
         env["PYTHONUNBUFFERED"] = "1"
+        env["NODE_PATH"] = self._node_path(env.get("NODE_PATH", ""))
         env["SEND_TRANSACTION"] = "true" if self.send_transaction_var.get() else env.get("SEND_TRANSACTION", "false")
 
         self.write_terminal(f"\n> {action.label}\n")
@@ -273,10 +301,67 @@ class Dashboard:
         )
         threading.Thread(target=self._read_process_output, daemon=True).start()
 
-    def _runner_args(self, action: Action) -> list[str]:
+    def run_dependency_installer(self) -> None:
+        if self.process and self.process.poll() is None:
+            messagebox.showwarning(APP_NAME, "Another action is already running.")
+            return
+        installer = bundled_root() / "install_dependencies.py"
+        if not installer.exists():
+            messagebox.showerror(APP_NAME, "install_dependencies.py was not found.")
+            return
+
+        try:
+            runner_args = self._runner_args(installer)
+        except RuntimeError as exc:
+            messagebox.showerror(APP_NAME, str(exc))
+            return
+        env = os.environ.copy()
+        env.update(self.env_values)
+        env["PYTHONUNBUFFERED"] = "1"
+        env["NODE_PATH"] = self._node_path(env.get("NODE_PATH", ""))
+        self.write_terminal("\n> Install/Repair Dependencies\n")
+        self.write_terminal("> Answer prompts with the input box below, then click Send Input.\n")
+        self.write_terminal(f"> {' '.join(runner_args)}\n\n")
+
+        creationflags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+        self.process = subprocess.Popen(
+            runner_args,
+            cwd=str(app_root()),
+            env=env,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+            creationflags=creationflags,
+        )
+        threading.Thread(target=self._read_process_output, daemon=True).start()
+
+    def _runner_args(self, script_path: Path) -> list[str]:
+        if script_path.suffix == ".ts":
+            return self._typescript_runner_args(script_path)
         if is_frozen():
-            return [sys.executable, "--run-script", str(action.path)]
-        return [sys.executable, str(Path(__file__).resolve()), "--run-script", str(action.path)]
+            return [sys.executable, "--run-script", str(script_path)]
+        return [sys.executable, str(Path(__file__).resolve()), "--run-script", str(script_path)]
+
+    def _typescript_runner_args(self, script_path: Path) -> list[str]:
+        bin_name = "tsx.cmd" if os.name == "nt" else "tsx"
+        local_tsx = app_root() / "node_modules" / ".bin" / bin_name
+        if local_tsx.exists():
+            return [str(local_tsx), str(script_path)]
+
+        npm_name = "npm.cmd" if os.name == "nt" else "npm"
+        npm = shutil.which(npm_name) or shutil.which("npm")
+        if npm:
+            return [npm, "exec", "--", "tsx", str(script_path)]
+
+        raise RuntimeError("Node/npm was not found. Use Install/Repair Dependencies, install Node.js, then retry.")
+
+    def _node_path(self, existing: str) -> str:
+        paths = [str(app_root() / "node_modules"), str(bundled_root() / "node_modules")]
+        if existing:
+            paths.append(existing)
+        return os.pathsep.join(paths)
 
     def _read_process_output(self) -> None:
         assert self.process and self.process.stdout

@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 
 import base58
+import requests
 from solana.rpc.api import Client
 from solders.keypair import Keypair
 from solders.pubkey import Pubkey
@@ -76,6 +77,30 @@ def print_response(resp) -> None:
         print(json.dumps(resp, indent=2, default=str))
     except TypeError:
         print(resp)
+
+
+def http_get(base_url: str, path: str = "", params: dict | None = None) -> None:
+    url = base_url.rstrip("/") + ("/" + path.lstrip("/") if path else "")
+    response = requests.get(url, params={k: v for k, v in (params or {}).items() if v not in ("", None)}, timeout=env_int("HTTP_TIMEOUT_SECONDS", 20))
+    response.raise_for_status()
+    try:
+        print_response(response.json())
+    except ValueError:
+        print(response.text)
+
+
+def http_post_json(base_url: str, path: str = "", payload: dict | None = None, headers: dict | None = None) -> None:
+    url = base_url.rstrip("/") + ("/" + path.lstrip("/") if path else "")
+    response = requests.post(url, json=payload or {}, headers=headers or {}, timeout=env_int("HTTP_TIMEOUT_SECONDS", 30))
+    response.raise_for_status()
+    try:
+        print_response(response.json())
+    except ValueError:
+        print(response.text)
+
+
+def read_json_file(env_name: str) -> dict:
+    return json.loads(Path(env(env_name, required=True)).read_text(encoding="utf-8"))
 
 
 def send_or_print(instructions, signer_env: str = "SOLANA_ACTIVE_PRIVATE_KEY_BASE58") -> None:

@@ -14,6 +14,7 @@ import os
 from pathlib import Path
 
 import base58
+import requests
 from solana.rpc.api import Client
 from solders.keypair import Keypair
 from solders.pubkey import Pubkey
@@ -80,6 +81,30 @@ def print_response(resp) -> None:
         print(json.dumps(resp, indent=2, default=str))
     except TypeError:
         print(resp)
+
+
+def http_get(base_url: str, path: str = "", params: dict | None = None) -> None:
+    url = base_url.rstrip("/") + ("/" + path.lstrip("/") if path else "")
+    response = requests.get(url, params={k: v for k, v in (params or {}).items() if v not in ("", None)}, timeout=env_int("HTTP_TIMEOUT_SECONDS", 20))
+    response.raise_for_status()
+    try:
+        print_response(response.json())
+    except ValueError:
+        print(response.text)
+
+
+def http_post_json(base_url: str, path: str = "", payload: dict | None = None, headers: dict | None = None) -> None:
+    url = base_url.rstrip("/") + ("/" + path.lstrip("/") if path else "")
+    response = requests.post(url, json=payload or {}, headers=headers or {}, timeout=env_int("HTTP_TIMEOUT_SECONDS", 30))
+    response.raise_for_status()
+    try:
+        print_response(response.json())
+    except ValueError:
+        print(response.text)
+
+
+def read_json_file(env_name: str) -> dict:
+    return json.loads(Path(env(env_name, required=True)).read_text(encoding="utf-8"))
 
 
 def send_or_print(instructions, signer_env: str = "SOLANA_ACTIVE_PRIVATE_KEY_BASE58") -> None:
@@ -455,6 +480,241 @@ exec((Path(__file__).resolve().parents[1] / "spl_token" / "thaw_account.py").rea
     script("token_2022", "set_authority", "Set Token-2022 authority", '''
 os.environ["TOKEN_PROGRAM_ID"] = env("TOKEN_2022_PROGRAM_ID", "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb")
 exec((Path(__file__).resolve().parents[1] / "spl_token" / "set_authority.py").read_text(encoding="utf-8"))
+'''),
+
+    # Raydium API v3, Trade API, and LaunchLab helpers.
+    script("raydium", "api_v3_get", "Call a Raydium API v3 GET endpoint", '''
+params = json.loads(env("RAYDIUM_QUERY_JSON", "{}"))
+http_get(env("RAYDIUM_API_V3_URL", "https://api-v3.raydium.io"), env("RAYDIUM_API_PATH", required=True), params)
+'''),
+    script("raydium", "list_mints", "List Raydium mint metadata", '''
+params = {
+    "chain": env("CHAIN", "solana"),
+    "page": env("PAGE", "1"),
+    "pageSize": env("PAGE_SIZE", "100"),
+}
+if env("MINT_SEARCH"):
+    params["keyword"] = env("MINT_SEARCH")
+http_get(env("RAYDIUM_API_V3_URL", "https://api-v3.raydium.io"), "/mint/list", params)
+'''),
+    script("raydium", "mint_price", "Get Raydium mint prices", '''
+http_get(env("RAYDIUM_API_V3_URL", "https://api-v3.raydium.io"), "/mint/price", {"mints": ",".join(env_list("MINTS"))})
+'''),
+    script("raydium", "pool_list", "List Raydium pools", '''
+params = {
+    "poolType": env("POOL_TYPE", "all"),
+    "poolSortField": env("POOL_SORT_FIELD", "default"),
+    "sortType": env("SORT_TYPE", "desc"),
+    "pageSize": env("PAGE_SIZE", "100"),
+    "page": env("PAGE", "1"),
+}
+http_get(env("RAYDIUM_API_V3_URL", "https://api-v3.raydium.io"), "/pools/info/list", params)
+'''),
+    script("raydium", "pool_by_ids", "Get Raydium pools by IDs", '''
+http_get(env("RAYDIUM_API_V3_URL", "https://api-v3.raydium.io"), "/pools/info/ids", {"ids": ",".join(env_list("POOL_IDS"))})
+'''),
+    script("raydium", "pool_by_mints", "Find Raydium pools by token mints", '''
+params = {
+    "mint1": env("MINT_1", required=True),
+    "mint2": env("MINT_2", required=True),
+    "poolType": env("POOL_TYPE", "all"),
+    "poolSortField": env("POOL_SORT_FIELD", "default"),
+    "sortType": env("SORT_TYPE", "desc"),
+    "pageSize": env("PAGE_SIZE", "20"),
+    "page": env("PAGE", "1"),
+}
+http_get(env("RAYDIUM_API_V3_URL", "https://api-v3.raydium.io"), "/pools/info/mint", params)
+'''),
+    script("raydium", "priority_fee", "Get Raydium priority fee suggestions", '''
+http_get(env("RAYDIUM_API_V3_URL", "https://api-v3.raydium.io"), env("RAYDIUM_PRIORITY_FEE_PATH", "/main/auto-fee"))
+'''),
+    script("raydium", "swap_quote_base_in", "Get Raydium swap quote for exact input", '''
+params = {
+    "inputMint": env("INPUT_MINT", required=True),
+    "outputMint": env("OUTPUT_MINT", required=True),
+    "amount": env("RAW_AMOUNT", required=True),
+    "slippageBps": env("SLIPPAGE_BPS", "50"),
+    "txVersion": env("TX_VERSION", "V0"),
+}
+http_get(env("RAYDIUM_TRANSACTION_URL", "https://transaction-v1.raydium.io"), "/compute/swap-base-in", params)
+'''),
+    script("raydium", "swap_quote_base_out", "Get Raydium swap quote for exact output", '''
+params = {
+    "inputMint": env("INPUT_MINT", required=True),
+    "outputMint": env("OUTPUT_MINT", required=True),
+    "amount": env("RAW_OUTPUT_AMOUNT", required=True),
+    "slippageBps": env("SLIPPAGE_BPS", "50"),
+    "txVersion": env("TX_VERSION", "V0"),
+}
+http_get(env("RAYDIUM_TRANSACTION_URL", "https://transaction-v1.raydium.io"), "/compute/swap-base-out", params)
+'''),
+    script("raydium", "build_swap_base_in_transaction", "Build Raydium exact-input swap transaction", '''
+swap_response = read_json_file("RAYDIUM_SWAP_RESPONSE_JSON")
+payload = {
+    "computeUnitPriceMicroLamports": env("COMPUTE_UNIT_PRICE_MICRO_LAMPORTS", "50000"),
+    "swapResponse": swap_response.get("data", swap_response),
+    "txVersion": env("TX_VERSION", "V0"),
+    "wallet": str(keypair().pubkey()),
+    "wrapSol": env_bool("WRAP_SOL", True),
+    "unwrapSol": env_bool("UNWRAP_SOL", False),
+}
+if env("INPUT_TOKEN_ACCOUNT"):
+    payload["inputAccount"] = env("INPUT_TOKEN_ACCOUNT")
+if env("OUTPUT_TOKEN_ACCOUNT"):
+    payload["outputAccount"] = env("OUTPUT_TOKEN_ACCOUNT")
+http_post_json(env("RAYDIUM_TRANSACTION_URL", "https://transaction-v1.raydium.io"), "/transaction/swap-base-in", payload)
+'''),
+    script("raydium", "build_swap_base_out_transaction", "Build Raydium exact-output swap transaction", '''
+swap_response = read_json_file("RAYDIUM_SWAP_RESPONSE_JSON")
+payload = {
+    "computeUnitPriceMicroLamports": env("COMPUTE_UNIT_PRICE_MICRO_LAMPORTS", "50000"),
+    "swapResponse": swap_response.get("data", swap_response),
+    "txVersion": env("TX_VERSION", "V0"),
+    "wallet": str(keypair().pubkey()),
+    "wrapSol": env_bool("WRAP_SOL", True),
+    "unwrapSol": env_bool("UNWRAP_SOL", False),
+}
+if env("INPUT_TOKEN_ACCOUNT"):
+    payload["inputAccount"] = env("INPUT_TOKEN_ACCOUNT")
+if env("OUTPUT_TOKEN_ACCOUNT"):
+    payload["outputAccount"] = env("OUTPUT_TOKEN_ACCOUNT")
+http_post_json(env("RAYDIUM_TRANSACTION_URL", "https://transaction-v1.raydium.io"), "/transaction/swap-base-out", payload)
+'''),
+    script("raydium", "sign_and_send_built_transactions", "Sign and optionally send Raydium-built transactions", '''
+import base64
+from solana.rpc.types import TxOpts
+from solders.transaction import VersionedTransaction
+
+payload = read_json_file("RAYDIUM_BUILT_TRANSACTIONS_JSON")
+transactions = payload.get("data", payload)
+if isinstance(transactions, dict):
+    transactions = transactions.get("transactions") or transactions.get("txs") or [transactions]
+
+rpc = client()
+payer = keypair()
+for index, item in enumerate(transactions, start=1):
+    encoded = item.get("transaction") if isinstance(item, dict) else item
+    tx = VersionedTransaction.from_bytes(base64.b64decode(encoded))
+    if not env_bool("SEND_TRANSACTION", False):
+        print(f"DRY RUN: decoded Raydium transaction {index}: {tx}")
+        continue
+    if hasattr(tx, "sign"):
+        tx.sign([payer])
+        signed_bytes = bytes(tx)
+    else:
+        signed_tx = VersionedTransaction(tx.message, [payer])
+        signed_bytes = bytes(signed_tx)
+    print_response(rpc.send_raw_transaction(signed_bytes, opts=TxOpts(skip_preflight=False)))
+'''),
+    script("raydium_launchlab", "mint_api_get", "Call a Raydium LaunchLab Mint API endpoint", '''
+params = json.loads(env("LAUNCHLAB_QUERY_JSON", "{}"))
+http_get(env("LAUNCHLAB_MINT_URL", "https://launch-mint-v1.raydium.io"), env("LAUNCHLAB_API_PATH", required=True), params)
+'''),
+    script("raydium_launchlab", "history_api_get", "Call a Raydium LaunchLab History API endpoint", '''
+params = json.loads(env("LAUNCHLAB_QUERY_JSON", "{}"))
+http_get(env("LAUNCHLAB_HISTORY_URL", "https://launch-history-v1.raydium.io"), env("LAUNCHLAB_HISTORY_PATH", required=True), params)
+'''),
+    script("raydium_launchlab", "launch_status", "Get Raydium LaunchLab launch status", '''
+http_get(env("RAYDIUM_API_V3_URL", "https://api-v3.raydium.io"), "/launchpad/status", {"launchId": env("LAUNCH_ID", required=True)})
+'''),
+    script("raydium_launchlab", "request_auth_token", "Request a Raydium LaunchLab auth token", '''
+wallet = keypair()
+message = env("LAUNCHLAB_AUTH_MESSAGE", f"time: {env('LAUNCHLAB_AUTH_TIME', '0')}")
+signature = wallet.sign_message(message.encode("utf-8"))
+payload = {
+    "wallet": str(wallet.pubkey()),
+    "message": message,
+    "signature": str(signature),
+}
+http_post_json(env("LAUNCHLAB_AUTH_URL", "https://launch-auth-v1.raydium.io"), "/request-token", payload)
+'''),
+    script("raydium_launchlab", "forum_api_get", "Call Raydium LaunchLab Forum API with ray-token", '''
+headers = {"ray-token": env("RAY_TOKEN", required=True)}
+params = json.loads(env("LAUNCHLAB_QUERY_JSON", "{}"))
+url = env("LAUNCHLAB_FORUM_URL", "https://launch-forum-v1.raydium.io").rstrip("/") + "/" + env("LAUNCHLAB_FORUM_PATH", required=True).lstrip("/")
+response = requests.get(url, params=params, headers=headers, timeout=env_int("HTTP_TIMEOUT_SECONDS", 20))
+response.raise_for_status()
+print_response(response.json())
+'''),
+    script("raydium_launchlab", "forum_api_post", "Post to Raydium LaunchLab Forum API with ray-token", '''
+headers = {"ray-token": env("RAY_TOKEN", required=True)}
+payload = read_json_file("LAUNCHLAB_FORUM_PAYLOAD_JSON")
+http_post_json(env("LAUNCHLAB_FORUM_URL", "https://launch-forum-v1.raydium.io"), env("LAUNCHLAB_FORUM_PATH", required=True), payload, headers=headers)
+'''),
+
+    # Meteora read/API helpers. Execution and position management usually require the TS SDK.
+    script("meteora", "dlmm_pair_all", "List Meteora DLMM pairs", '''
+http_get(env("METEORA_DLMM_PAIR_URL", "https://dlmm-api.meteora.ag"), "/pair/all")
+'''),
+    script("meteora", "dlmm_pools", "List Meteora DLMM pools", '''
+params = json.loads(env("METEORA_QUERY_JSON", "{}"))
+http_get(env("METEORA_DLMM_API_URL", "https://dlmm-api.meteora.ag"), "/pools", params)
+'''),
+    script("meteora", "damm_v2_pools", "List Meteora DAMM v2 pools", '''
+params = json.loads(env("METEORA_QUERY_JSON", "{}"))
+http_get(env("METEORA_DAMM_V2_API_URL", "https://dammv2-api.meteora.ag"), "/pools", params)
+'''),
+    script("meteora", "api_get", "Call a Meteora GET endpoint", '''
+params = json.loads(env("METEORA_QUERY_JSON", "{}"))
+http_get(env("METEORA_API_URL", required=True), env("METEORA_API_PATH", ""), params)
+'''),
+    script("meteora", "sdk_action_notes", "Print Meteora SDK-only action notes", '''
+print("Meteora swap, create position, add/remove liquidity, close position, fee claim, and reward claim are SDK-driven flows.")
+print("Use @meteora-ag/dlmm for DLMM execution: getBinArrayForSwap -> swapQuote -> swap.")
+print("This Python toolkit exposes API discovery/read helpers and can run generic HTTP endpoints.")
+'''),
+
+    # Orca read/API helpers. Python execution can use whirlpool-essentials if installed separately.
+    script("orca", "list_pools", "List Orca Whirlpool pools", '''
+params = json.loads(env("ORCA_QUERY_JSON", "{}"))
+http_get(env("ORCA_API_URL", "https://api.orca.so/v2/solana"), "/pools", params)
+'''),
+    script("orca", "search_pools", "Search Orca Whirlpool pools", '''
+params = {
+    "q": env("SEARCH_QUERY", required=True),
+    "size": env("PAGE_SIZE", "20"),
+}
+if env("MIN_TVL"):
+    params["minTvl"] = env("MIN_TVL")
+if env("MIN_VOLUME"):
+    params["minVolume"] = env("MIN_VOLUME")
+http_get(env("ORCA_API_URL", "https://api.orca.so/v2/solana"), "/pools/search", params)
+'''),
+    script("orca", "get_pool", "Get Orca Whirlpool by address", '''
+http_get(env("ORCA_API_URL", "https://api.orca.so/v2/solana"), f"/pools/{env('POOL_ADDRESS', required=True)}")
+'''),
+    script("orca", "api_get", "Call an Orca GET endpoint", '''
+params = json.loads(env("ORCA_QUERY_JSON", "{}"))
+http_get(env("ORCA_API_URL", "https://api.orca.so/v2/solana"), env("ORCA_API_PATH", required=True), params)
+'''),
+    script("orca", "sdk_action_notes", "Print Orca SDK-only action notes", '''
+print("Orca swap and position management are best handled with @orca-so/whirlpools or whirlpool-essentials.")
+print("This toolkit includes pool list/search/detail helpers through Orca REST API.")
+print("For Python execution, install whirlpool-essentials separately and keep production keys isolated.")
+'''),
+
+    # Generic launchpad and LP discovery helpers.
+    script("launchpads", "dexscreener_search", "Search DexScreener pairs", '''
+http_get("https://api.dexscreener.com", f"/latest/dex/search", {"q": env("SEARCH_QUERY", required=True)})
+'''),
+    script("launchpads", "dexscreener_token_pairs", "Get DexScreener token pairs", '''
+http_get("https://api.dexscreener.com", f"/token-pairs/v1/solana/{env('TOKEN_MINT', required=True)}")
+'''),
+    script("launchpads", "dexscreener_pair", "Get DexScreener pair by chain and pair", '''
+http_get("https://api.dexscreener.com", f"/latest/dex/pairs/{env('CHAIN_ID', 'solana')}/{env('PAIR_ADDRESS', required=True)}")
+'''),
+    script("launchpads", "generic_get", "Call any launchpad or LP GET endpoint", '''
+params = json.loads(env("QUERY_JSON", "{}"))
+http_get(env("BASE_URL", required=True), env("API_PATH", ""), params)
+'''),
+    script("launchpads", "generic_post_json", "Call any launchpad or LP JSON POST endpoint", '''
+payload = read_json_file("PAYLOAD_JSON_FILE")
+headers = json.loads(env("HEADERS_JSON", "{}"))
+if not env_bool("SEND_TRANSACTION", False):
+    print("DRY RUN: set SEND_TRANSACTION=true to perform POST.")
+    print_response({"url": env("BASE_URL", required=True).rstrip("/") + "/" + env("API_PATH", "").lstrip("/"), "payload": payload, "headers": headers})
+else:
+    http_post_json(env("BASE_URL", required=True), env("API_PATH", ""), payload, headers=headers)
 '''),
 
     # Jupiter and metadata helpers.

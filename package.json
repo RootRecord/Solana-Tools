@@ -1,0 +1,30 @@
+{
+  "name": "solana-tools",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Optional TypeScript SDK actions for Solana Tools.",
+  "scripts": {
+    "ts:check": "tsc --noEmit",
+    "action": "tsx"
+  },
+  "dependencies": {
+    "@coral-xyz/anchor": "latest",
+    "@meteora-ag/dlmm": "latest",
+    "@orca-so/whirlpools": "latest",
+    "@orca-so/whirlpools-client": "latest",
+    "@raydium-io/raydium-sdk-v2": "0.2.42-alpha",
+    "@solana/kit": "latest",
+    "@solana/spl-token": "latest",
+    "@solana/web3.js": "latest",
+    "bn.js": "latest",
+    "bs58": "latest",
+    "dotenv": "latest",
+    "tsx": "latest",
+    "typescript": "latest"
+  },
+  "devDependencies": {
+    "@types/bn.js": "latest",
+    "@types/node": "latest"
+  }
+}

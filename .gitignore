@@ -22,6 +22,10 @@ build/
 dist/
 *.spec.bak
 
+# Node / TypeScript SDK actions
+node_modules/
+.npm/
+
 # Editor / OS
 .vscode/
 .idea/
