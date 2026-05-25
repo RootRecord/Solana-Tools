@@ -6,7 +6,15 @@ import {
   TxVersion,
 } from "@raydium-io/raydium-sdk-v2";
 import { PublicKey } from "@solana/web3.js";
-import { connection, env, envBool, keypair, printJson } from "./common.js";
+import {
+  connection,
+  env,
+  envBool,
+  estimateAndPrintTransactionCost,
+  keypair,
+  printJson,
+  requireTransactionConfirmation,
+} from "./common.js";
 
 const owner = keypair();
 const conn = connection();
@@ -31,7 +39,7 @@ const poolId = new PublicKey(env("RAYDIUM_LAUNCHPAD_POOL_ID", undefined, true));
 const poolInfo = await (raydium.launchpad as any).getPoolInfoFromRpc(poolId);
 const mintInfo = await raydium.token.getTokenInfo(mintA);
 
-const { execute, extInfo } = await raydium.launchpad.buyToken({
+const buy = await raydium.launchpad.buyToken({
   programId,
   mintA,
   mintAProgram: new PublicKey((mintInfo as any).programId),
@@ -41,6 +49,7 @@ const { execute, extInfo } = await raydium.launchpad.buyToken({
   buyAmount: new BN(env("RAW_AMOUNT", undefined, true)),
   slippage: new BN(env("SLIPPAGE_BPS", "100")),
 } as any);
+const { execute, extInfo } = buy;
 
 printJson({
   poolId,
@@ -49,10 +58,13 @@ printJson({
   dryRun: !envBool("SEND_TRANSACTION"),
 });
 
+const feeLamports = await estimateAndPrintTransactionCost((buy as any).transactions ?? (buy as any).transaction, owner);
+
 if (!envBool("SEND_TRANSACTION")) {
-  console.log("DRY RUN: set SEND_TRANSACTION=true to buy from this LaunchLab pool.");
+  console.log("DRY RUN: no transaction was broadcast.");
   process.exit(0);
 }
 
+await requireTransactionConfirmation(feeLamports);
 const sentInfo = await execute({ sendAndConfirm: true } as any);
 printJson(sentInfo);

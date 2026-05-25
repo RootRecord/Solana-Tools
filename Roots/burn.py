@@ -10,6 +10,7 @@ from config import (
     RPC_URL,
     keypair_from_env,
 )
+from transaction_confirm import preview_or_confirm
 
 print("🔥 Roots Token Burn Script\n")
 
@@ -69,6 +70,8 @@ def main():
         )
 
         tx = VersionedTransaction(message, [payer])
+        if not preview_or_confirm(client, message, "burn transaction"):
+            return
         result = client.send_raw_transaction(bytes(tx), opts=TxOpts(skip_preflight=True))
 
         print("\n✅ BURN TRANSACTION SENT SUCCESSFULLY!")

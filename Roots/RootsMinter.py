@@ -11,6 +11,7 @@ from config import (
     RPC_URL,
     keypair_from_env,
 )
+from transaction_confirm import preview_or_confirm
 
 print("✅ All-In-One Mint Script with Authority Check")
 
@@ -82,6 +83,8 @@ def main():
         )
 
         tx = VersionedTransaction(message, [payer])
+        if not preview_or_confirm(client, message, "mint transaction"):
+            return
         result = client.send_raw_transaction(bytes(tx), opts=TxOpts(skip_preflight=True))
 
         print("\n🎉 TRANSACTION SENT!")

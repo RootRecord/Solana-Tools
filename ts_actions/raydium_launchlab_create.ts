@@ -9,7 +9,17 @@ import {
 } from "@raydium-io/raydium-sdk-v2";
 import { NATIVE_MINT } from "@solana/spl-token";
 import { Keypair, PublicKey } from "@solana/web3.js";
-import { connection, env, envBool, envInt, envJson, keypair, printJson } from "./common.js";
+import {
+  connection,
+  env,
+  envBool,
+  envInt,
+  envJson,
+  estimateAndPrintTransactionCost,
+  keypair,
+  printJson,
+  requireTransactionConfirmation,
+} from "./common.js";
 
 const owner = keypair();
 const conn = connection();
@@ -49,7 +59,7 @@ const fees = envJson("RAYDIUM_LAUNCHPAD_FEES_JSON", {
   totalShare: "100",
 });
 
-const { execute, extInfo } = await raydium.launchpad.createLaunchpad({
+const launch = await raydium.launchpad.createLaunchpad({
   programId,
   mintA: mintA.publicKey,
   decimals: envInt("TOKEN_DECIMALS", 6),
@@ -87,6 +97,7 @@ const { execute, extInfo } = await raydium.launchpad.createLaunchpad({
   txVersion: TxVersion.V0,
   slippage: new BN(env("SLIPPAGE_BPS", "100")),
 } as any);
+const { execute, extInfo } = launch;
 
 printJson({
   programId,
@@ -97,10 +108,13 @@ printJson({
   dryRun: !envBool("SEND_TRANSACTION"),
 });
 
+const feeLamports = await estimateAndPrintTransactionCost((launch as any).transactions ?? (launch as any).transaction, owner);
+
 if (!envBool("SEND_TRANSACTION")) {
-  console.log("DRY RUN: set SEND_TRANSACTION=true to create this LaunchLab mint.");
+  console.log("DRY RUN: no transaction was broadcast.");
   process.exit(0);
 }
 
+await requireTransactionConfirmation(feeLamports);
 const sentInfo = await execute({ sequentially: true, sendAndConfirm: true } as any);
 printJson(sentInfo);

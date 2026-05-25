@@ -3,8 +3,10 @@
 Each script in this directory is standalone: it loads `.env`, imports its own dependencies,
 and runs one focused Solana operation.
 
-Read-only scripts execute immediately. Transaction-building scripts default to dry-run mode
-and print their instruction. Set `SEND_TRANSACTION=true` to broadcast.
+Read-only scripts execute immediately. Transaction-building scripts default to dry-run mode,
+print their instruction, and estimate the network fee. Set `SEND_TRANSACTION=true` to allow
+broadcast, then type `EXECUTE` when prompted. The dashboard handles this with its
+`Preview Selected` and `Confirm/Execute Preview` buttons.
 
 ## Scripts
 

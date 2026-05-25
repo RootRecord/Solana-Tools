@@ -12,6 +12,7 @@ from config import (
     keypair_from_env,
 )
 import time
+from transaction_confirm import preview_or_confirm
 
 print("✅ Update Authority Transfer Script")
 
@@ -53,6 +54,8 @@ def main():
         )
 
         tx = VersionedTransaction(msg, [payer])
+        if not preview_or_confirm(client, msg, "metadata authority transfer"):
+            return
         result = client.send_raw_transaction(bytes(tx), opts=TxOpts(skip_preflight=True))
 
         print("\n🎉 UPDATE AUTHORITY TRANSACTION SENT!")

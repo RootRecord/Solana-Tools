@@ -1,7 +1,7 @@
 import bs58 from "bs58";
 import { createKeyPairSignerFromBytes, createSolanaRpc, address, devnet, mainnet } from "@solana/kit";
 import { setRpc, swap, swapInstructions, WhirlpoolDeployment } from "@orca-so/whirlpools";
-import { env, envBool, printJson } from "./common.js";
+import { env, envBool, printJson, requireTransactionConfirmation } from "./common.js";
 
 const rpcUrl = env("SOLANA_RPC_URL", "https://api.mainnet-beta.solana.com");
 const cluster = env("SOLANA_CLUSTER", "mainnet-beta");
@@ -35,12 +35,15 @@ printJson({
   instructionCount: instructions.length,
   dryRun: !envBool("SEND_TRANSACTION"),
 });
+console.log("Estimated network fee: unavailable until Orca builds the final transaction internally.");
+console.log("Review quote output above. Estimate excludes token amounts, rent deposits, DEX/platform fees, and priority-fee changes.");
 
 if (!envBool("SEND_TRANSACTION")) {
-  console.log("DRY RUN: set SEND_TRANSACTION=true to broadcast this Orca Whirlpool swap.");
+  console.log("DRY RUN: no transaction was broadcast.");
   process.exit(0);
 }
 
+await requireTransactionConfirmation(null);
 const signature = await swap(
   { inputAmount: amount, mint: mintAddress },
   whirlpoolAddress,

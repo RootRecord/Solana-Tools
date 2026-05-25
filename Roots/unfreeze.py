@@ -5,6 +5,7 @@ from solders.transaction import VersionedTransaction
 from solders.message import MessageV0
 from solana.rpc.types import TxOpts
 from config import ROOTS_MINT_ADDRESS, ROOTS_UNFREEZE_ACCOUNTS, RPC_URL, keypair_from_env
+from transaction_confirm import preview_or_confirm
 
 print("🔍 LP Unfreeze Diagnostic + Attempt\n")
 
@@ -52,6 +53,8 @@ if instructions:
         recent = client.get_latest_blockhash(Confirmed).value.blockhash
         msg = MessageV0.try_compile(payer.pubkey(), instructions, [], recent)
         tx = VersionedTransaction(msg, [payer])
+        if not preview_or_confirm(client, msg, "unfreeze transaction"):
+            raise SystemExit(0)
         result = client.send_raw_transaction(bytes(tx), opts=TxOpts(skip_preflight=True))
         print(f"\n✅ Transaction sent: {result.value}")
         print(f"https://explorer.solana.com/tx/{result.value}")

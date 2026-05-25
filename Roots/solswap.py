@@ -21,6 +21,7 @@ from config import (
     USDC_MINT,
     keypair_from_env,
 )
+from transaction_confirm import preview_or_confirm
 
 print("🚀 Advanced Jupiter Trading Assistant + Resilient Network\n")
 
@@ -175,6 +176,8 @@ def main():
 
             tx = VersionedTransaction.from_bytes(base58.b58decode(swap_resp['swapTransaction']))
             tx.sign([payer])
+            if not preview_or_confirm(client, tx.message, "Jupiter swap transaction"):
+                continue
             result = client.send_raw_transaction(bytes(tx), opts=TxOpts(skip_preflight=True))
 
             print(f"\n✅ SUCCESS! Tx: {result.value}")

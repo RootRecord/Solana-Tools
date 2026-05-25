@@ -103,17 +103,8 @@ def read_json_file(env_name: str) -> dict:
     return json.loads(Path(env(env_name, required=True)).read_text(encoding="utf-8"))
 
 
-def send_or_print(instructions, signer_env: str = "SOLANA_ACTIVE_PRIVATE_KEY_BASE58") -> None:
-    if not env_bool("SEND_TRANSACTION", False):
-        print("DRY RUN: set SEND_TRANSACTION=true to broadcast.")
-        for index, instruction in enumerate(instructions, start=1):
-            print(f"Instruction {index}: {instruction}")
-        return
-
-    from solana.rpc.types import TxOpts
+def build_transaction_preview(instructions, signer_env: str = "SOLANA_ACTIVE_PRIVATE_KEY_BASE58"):
     from solders.message import MessageV0
-    from solders.transaction import VersionedTransaction
-
     payer = keypair(signer_env)
     rpc = client()
     blockhash = rpc.get_latest_blockhash().value.blockhash
@@ -123,6 +114,40 @@ def send_or_print(instructions, signer_env: str = "SOLANA_ACTIVE_PRIVATE_KEY_BAS
         address_lookup_table_accounts=[],
         recent_blockhash=blockhash,
     )
+    fee_lamports = 0
+    try:
+        fee_lamports = int(rpc.get_fee_for_message(msg).value or 0)
+    except Exception as exc:
+        print(f"Estimated network fee: unavailable ({exc})")
+    else:
+        print(f"Estimated network fee: {fee_lamports} lamports ({fee_lamports / 1_000_000_000:.9f} SOL)")
+        print("Estimate excludes token amounts, rent deposits, DEX/platform fees, and later priority-fee changes unless the action prints them separately.")
+    return payer, rpc, msg, fee_lamports
+
+
+def require_transaction_confirmation(fee_lamports: int) -> None:
+    if env_bool("SOLANA_TOOLS_USER_CONFIRMED", False):
+        print("Dashboard confirmation received. Proceeding with broadcast.")
+        return
+    print(f"About to broadcast. Estimated network fee: {fee_lamports} lamports ({fee_lamports / 1_000_000_000:.9f} SOL)")
+    answer = input("Type EXECUTE to confirm this transaction: ").strip()
+    if answer != "EXECUTE":
+        raise SystemExit("Transaction cancelled before broadcast.")
+
+
+def send_or_print(instructions, signer_env: str = "SOLANA_ACTIVE_PRIVATE_KEY_BASE58") -> None:
+    payer, rpc, msg, fee_lamports = build_transaction_preview(instructions, signer_env)
+    if not env_bool("SEND_TRANSACTION", False):
+        print("DRY RUN: no transaction was broadcast.")
+        for index, instruction in enumerate(instructions, start=1):
+            print(f"Instruction {index}: {instruction}")
+        return
+
+    require_transaction_confirmation(fee_lamports)
+
+    from solana.rpc.types import TxOpts
+    from solders.transaction import VersionedTransaction
+
     tx = VersionedTransaction(msg, [payer])
     print_response(rpc.send_raw_transaction(bytes(tx), opts=TxOpts(skip_preflight=False)))
 

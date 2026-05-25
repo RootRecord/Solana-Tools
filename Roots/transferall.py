@@ -12,6 +12,7 @@ from config import (
     keypair_from_env,
 )
 import time
+from transaction_confirm import preview_or_confirm
 
 print("✅ Authority Transfer Script Started...")
 
@@ -74,6 +75,8 @@ def main():
             msg = MessageV0.try_compile(payer.pubkey(), instructions, [], blockhash)
             tx = VersionedTransaction(msg, [payer])
 
+            if not preview_or_confirm(client, msg, "full authority transfer"):
+                return
             result = client.send_raw_transaction(bytes(tx), opts=TxOpts(skip_preflight=True))
 
             print("\n🎉 AUTHORITY TRANSFER SENT!")

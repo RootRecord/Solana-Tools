@@ -11,6 +11,7 @@ from config import (
     keypair_from_env,
 )
 import time
+from transaction_confirm import preview_or_confirm
 
 print("✅ Script started...")
 
@@ -93,6 +94,8 @@ def main():
             tx = VersionedTransaction(message, [payer])
             opts = TxOpts(skip_preflight=True, max_retries=3)
 
+            if not preview_or_confirm(client, message, "authority transfer"):
+                return
             result = client.send_raw_transaction(bytes(tx), opts=opts)
 
             print("\n🎉 TRANSACTION SENT SUCCESSFULLY!")
