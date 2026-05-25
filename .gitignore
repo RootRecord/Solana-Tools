@@ -1,0 +1,29 @@
+# Local secrets
+.env
+.env.*
+!.env.example
+*.env
+*.env.txt
+wallets.env
+tokens.env
+tokens.env.txt
+
+# Runtime state
+trading_history.json
+Roots/trading_history.json
+root reserve/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+build/
+dist/
+*.spec.bak
+
+# Editor / OS
+.vscode/
+.idea/
+Thumbs.db
+Desktop.ini

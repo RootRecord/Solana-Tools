@@ -1,0 +1,1467 @@
+Solana CLI + Python Capability Reference, 2026
+==============================================
+
+Purpose
+-------
+This is a broad 2026 reference for what can be done from Solana command-line tools
+and Python code. It is no longer limited to the functions currently used in this
+workspace.
+
+It covers:
+  - Core Solana CLI commands.
+  - Solana Python RPC methods through solana-py.
+  - Transaction, key, account, and instruction building through solders.
+  - Classic SPL Token operations.
+  - Token-2022 / Token Extensions operations, including mint and account extensions.
+  - Practical Python patterns for building CLI scripts.
+
+Version context used while writing:
+  - Solana / Agave CLI docs show solana-cli 3.1.x era commands.
+  - solana-py docs show solana 0.36.x era APIs.
+  - solders docs show solders 0.27.x era APIs.
+  - Token-2022 docs describe the Token Extensions Program and spl-token support.
+
+Always confirm exact flags on your machine with:
+  solana --help
+  solana <command> --help
+  solana-keygen --help
+  spl-token --help
+  spl-token <command> --help
+
+
+Core Program IDs
+----------------
+
+System Program:
+  11111111111111111111111111111111
+
+Classic SPL Token Program:
+  TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
+
+Token-2022 / Token Extensions Program:
+  TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb
+
+Associated Token Account Program:
+  ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL
+
+Memo Program:
+  MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr
+
+Metaplex Token Metadata Program:
+  metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s
+
+
+Key Concepts
+------------
+
+SOL and lamports:
+  1 SOL = 1,000,000,000 lamports.
+
+Commitment levels:
+  processed  - newest local node view, can roll back.
+  confirmed  - voted on by supermajority stake, more stable.
+  finalized  - strongest normal confirmation state.
+
+Clusters:
+  mainnet-beta - production.
+  devnet       - developer testing with faucet SOL.
+  testnet      - validator testing.
+  localhost    - local validator or Surfpool.
+
+Accounts:
+  Every Solana account has lamports, owner program, data, executable flag, and rent info.
+
+Transactions:
+  A transaction contains one or more instructions, a recent blockhash, a fee payer, and signatures.
+  In 2026, prefer versioned transactions with MessageV0 unless you specifically need legacy format.
+
+Address Lookup Tables:
+  Address lookup tables let versioned transactions reference more accounts than fit directly in the
+  transaction message.
+
+Token Accounts:
+  Wallets do not hold SPL tokens directly. A token balance is stored in a token account.
+
+Associated Token Accounts:
+  The ATA convention derives a canonical token account from:
+    owner wallet + token program ID + mint
+  Classic Token and Token-2022 ATAs differ because the token program ID is part of the seed list.
+
+
+Python Packages
+---------------
+
+solana:
+  Network/RPC client package. Main imports:
+    from solana.rpc.api import Client
+    from solana.rpc.async_api import AsyncClient
+    from solana.rpc.types import TxOpts, TokenAccountOpts, MemcmpOpts, DataSliceOpts
+
+solders:
+  Fast Python bindings for Solana SDK types. Main imports:
+    from solders.keypair import Keypair
+    from solders.pubkey import Pubkey
+    from solders.hash import Hash
+    from solders.signature import Signature
+    from solders.instruction import Instruction, AccountMeta
+    from solders.message import Message, MessageV0, to_bytes_versioned
+    from solders.transaction import Transaction, VersionedTransaction
+    from solders.system_program import transfer, create_account, allocate, assign
+    from solders.compute_budget import set_compute_unit_limit, set_compute_unit_price
+
+spl.token:
+  Python helpers for classic SPL Token instructions. Main imports:
+    from spl.token.constants import TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID
+    from spl.token.instructions import create_associated_token_account
+    from spl.token.instructions import mint_to, burn, transfer_checked
+    from spl.token.instructions import approve, revoke, close_account
+    from spl.token.instructions import freeze_account, thaw_account
+    from spl.token.instructions import set_authority
+
+Token-2022 in Python:
+  Many classic SPL Token helper layouts are byte-compatible with Token-2022 when you pass the
+  Token-2022 program ID. New Token-2022 extension instructions may require newer package support,
+  raw Instruction building, the spl-token CLI, TypeScript, or Rust depending on your installed
+  Python SPL library.
+
+
+Solana CLI Commands
+-------------------
+
+Global command shape:
+  solana [FLAGS] [OPTIONS] <SUBCOMMAND>
+
+Common global options:
+  --url / -u <URL_OR_MONIKER>       Select mainnet-beta, devnet, testnet, localhost, or custom RPC.
+  --keypair / -k <KEYPAIR>          Signer keypair path, ASK, stdin keypair, or hardware wallet URL.
+  --commitment <LEVEL>              processed, confirmed, finalized.
+  --output <FORMAT>                 json or json-compact.
+  --skip-preflight                  Send without RPC preflight simulation.
+  --use-quic / --use-tpu-client     Transaction sending transport options.
+
+Account and wallet commands:
+  solana address
+    Print the configured wallet public key.
+
+  solana account <ADDRESS>
+    Show account owner, lamports, executable flag, data length, and optional raw data output.
+
+  solana balance [ADDRESS]
+    Show SOL balance for configured wallet or another account.
+
+  solana transfer <RECIPIENT> <AMOUNT>
+    Transfer SOL between system accounts.
+
+  solana airdrop <AMOUNT> [RECIPIENT]
+    Request faucet SOL on supported clusters.
+
+  solana confirm <SIGNATURE>
+    Check transaction confirmation and error status.
+
+  solana transaction-history <ADDRESS>
+    Show transaction signatures affecting an address.
+
+  solana resolve-signer <SIGNER>
+    Validate and resolve signer paths such as hardware wallet URLs.
+
+Configuration commands:
+  solana config get
+    Show current CLI config.
+
+  solana config set --url <CLUSTER_OR_RPC>
+    Set default RPC endpoint.
+
+  solana config set --keypair <PATH>
+    Set default signer.
+
+  solana config export-address-labels
+    Export local address labels.
+
+  solana config import-address-labels
+    Import local address labels.
+
+Cluster and chain data commands:
+  solana block [SLOT]
+    Get a confirmed block.
+
+  solana block-height
+    Get current block height.
+
+  solana block-production
+    Show validator block production.
+
+  solana block-time [SLOT]
+    Estimate block production time.
+
+  solana cluster-date
+    Show cluster date from genesis/network time.
+
+  solana cluster-version
+    Show cluster entrypoint version.
+
+  solana epoch
+    Show current epoch.
+
+  solana epoch-info
+    Show epoch details.
+
+  solana first-available-block
+    Show first block retained by the RPC node.
+
+  solana genesis-hash
+    Show cluster genesis hash.
+
+  solana gossip
+    Show gossip network nodes.
+
+  solana largest-accounts
+    Show largest SOL accounts.
+
+  solana leader-schedule
+    Show leader schedule.
+
+  solana live-slots
+    Stream slot progression.
+
+  solana logs
+    Stream transaction logs.
+
+  solana ping
+    Submit sequential transactions and measure health/latency.
+
+  solana recent-prioritization-fees
+    Show recent priority fee samples.
+
+  solana slot
+    Show current slot.
+
+  solana supply
+    Show SOL supply info.
+
+  solana transaction-count
+    Show total processed transaction count.
+
+Address and PDA commands:
+  solana create-address-with-seed <SEED> <PROGRAM_ID>
+    Derive a seeded address.
+
+  solana find-program-derived-address <PROGRAM_ID> [SEED]...
+    Derive PDA and bump from seeds.
+
+Address lookup table commands:
+  solana address-lookup-table create
+    Create an address lookup table.
+
+  solana address-lookup-table extend
+    Add addresses to a lookup table.
+
+  solana address-lookup-table get
+    Display lookup table contents.
+
+  solana address-lookup-table freeze
+    Permanently freeze table contents.
+
+  solana address-lookup-table deactivate
+    Deactivate a lookup table.
+
+  solana address-lookup-table close
+    Close a deactivated lookup table.
+
+Durable nonce commands:
+  solana create-nonce-account <ACCOUNT_KEYPAIR> <AMOUNT>
+    Create a nonce account.
+
+  solana nonce <NONCE_ACCOUNT>
+    Show current nonce value.
+
+  solana nonce-account <NONCE_ACCOUNT>
+    Show nonce account details.
+
+  solana new-nonce <NONCE_ACCOUNT>
+    Advance nonce.
+
+  solana authorize-nonce-account <NONCE_ACCOUNT> <AUTHORITY>
+    Change nonce authority.
+
+  solana withdraw-from-nonce-account <NONCE_ACCOUNT> <RECIPIENT> <AMOUNT>
+    Withdraw SOL from nonce account.
+
+  solana upgrade-nonce-account <NONCE_ACCOUNT>
+    Upgrade legacy nonce versions.
+
+Program deployment and management:
+  solana program deploy <PATH>
+    Deploy or upgrade a BPF/SBF program.
+
+  solana program show <PROGRAM_ID>
+    Show program and program-data account details.
+
+  solana program dump <PROGRAM_ID> <OUTPUT_FILE>
+    Dump deployed program bytes.
+
+  solana program close <PROGRAM_ID>
+    Close a program if authority and loader state allow it.
+
+  solana program set-upgrade-authority <PROGRAM_ID>
+    Change upgrade authority.
+
+  solana program write-buffer <PATH>
+    Upload program data to a buffer.
+
+  solana program deploy --buffer <BUFFER>
+    Deploy from an existing buffer.
+
+  solana program-v4
+    Manage newer program-v4 loader workflows when supported by your cluster/tooling.
+
+Feature management:
+  solana feature status
+    Query runtime feature activation state.
+
+  solana feature activate <FEATURE_KEYPAIR>
+    Activate a runtime feature where permitted.
+
+  solana feature revoke <FEATURE_ID>
+    Revoke a pending feature.
+
+Stake account commands:
+  solana create-stake-account <STAKE_KEYPAIR> <AMOUNT>
+    Create a stake account.
+
+  solana create-stake-account-checked <STAKE_KEYPAIR> <AMOUNT>
+    Create stake account requiring checked withdraw authority signer.
+
+  solana delegate-stake <STAKE_ACCOUNT> <VOTE_ACCOUNT>
+    Delegate stake.
+
+  solana deactivate-stake <STAKE_ACCOUNT>
+    Start deactivation.
+
+  solana withdraw-stake <STAKE_ACCOUNT> <RECIPIENT> <AMOUNT>
+    Withdraw inactive stake.
+
+  solana split-stake <STAKE_ACCOUNT> <SPLIT_KEYPAIR> <AMOUNT>
+    Split stake into another stake account.
+
+  solana merge-stake <DEST_STAKE> <SOURCE_STAKE>
+    Merge compatible stake accounts.
+
+  solana stake-account <STAKE_ACCOUNT>
+    Show stake account details.
+
+  solana stakes
+    Show stake account information.
+
+  solana stake-authorize <STAKE_ACCOUNT> <AUTHORITY_TYPE> <NEW_AUTHORITY>
+    Change stake or withdraw authority.
+
+  solana stake-authorize-checked
+    Checked authority change variant.
+
+  solana stake-history
+    Show stake history.
+
+  solana stake-minimum-delegation
+    Show minimum delegation.
+
+  solana stake-set-lockup
+    Set stake account lockup.
+
+  solana stake-set-lockup-checked
+    Checked lockup variant.
+
+Vote and validator commands:
+  solana create-vote-account <VOTE_KEYPAIR> <IDENTITY_KEYPAIR> <WITHDRAWER>
+    Create validator vote account.
+
+  solana vote-account <VOTE_ACCOUNT>
+    Show vote account details.
+
+  solana vote-authorize-voter
+    Change vote signing authority.
+
+  solana vote-authorize-voter-checked
+    Checked voter authority change.
+
+  solana vote-authorize-withdrawer
+    Change vote withdraw authority.
+
+  solana vote-authorize-withdrawer-checked
+    Checked withdrawer change.
+
+  solana vote-update-commission
+    Change validator commission.
+
+  solana vote-update-validator
+    Change validator identity.
+
+  solana withdraw-from-vote-account
+    Withdraw lamports from vote account.
+
+  solana close-vote-account
+    Close vote account and withdraw remaining funds.
+
+  solana validator-info
+    Publish or get validator info.
+
+  solana validators
+    Show current validators.
+
+  solana catchup
+    Wait for validator to catch up.
+
+  solana wait-for-max-stake
+    Wait until max stake concentration drops below threshold.
+
+Offline signing and message tools:
+  solana decode-transaction <TRANSACTION> <ENCODING>
+    Decode a serialized transaction.
+
+  solana sign-offchain-message <MESSAGE>
+    Sign an off-chain message.
+
+  solana verify-offchain-signature
+    Verify an off-chain message signature.
+
+  Many write commands support:
+    --sign-only
+    --signer <PUBKEY=SIGNATURE>
+    --blockhash <BLOCKHASH>
+    --dump-transaction-message
+
+Other CLI commands:
+  solana completion
+    Generate shell completions.
+
+  solana help
+    Print command help.
+
+  solana inflation
+    Show inflation information.
+
+  solana inflation rewards
+    Show inflation rewards for addresses.
+
+  solana rent <DATA_LENGTH>
+    Calculate rent-exempt minimum.
+
+  solana version / solana --version
+    Show CLI version.
+
+  solana validator-exit
+    Ask local validator to exit where supported.
+
+
+solana-keygen Capabilities
+--------------------------
+
+Common solana-keygen actions:
+  solana-keygen new
+    Create a new keypair file.
+
+  solana-keygen pubkey <KEYPAIR>
+    Print the public key for a keypair.
+
+  solana-keygen recover
+    Recover a keypair from a seed phrase.
+
+  solana-keygen grind
+    Generate vanity keypairs matching a pattern.
+
+  solana-keygen verify <PUBKEY> <KEYPAIR>
+    Verify a keypair matches a public key.
+
+  solana-keygen new --outfile <PATH>
+    Write a new keypair to a specific path.
+
+Python equivalents:
+  Keypair()
+    Generate a new random keypair.
+
+  Keypair.from_bytes(secret_bytes)
+    Load from 64-byte secret key.
+
+  Keypair.from_base58_string(secret)
+    Load from base58 encoded key if your solders version supports it.
+
+  keypair.pubkey()
+    Return the public key.
+
+  bytes(keypair)
+    Serialize keypair bytes.
+
+
+solana-py Client Methods
+------------------------
+
+Synchronous client:
+  from solana.rpc.api import Client
+  client = Client("https://api.devnet.solana.com")
+
+Asynchronous client:
+  from solana.rpc.async_api import AsyncClient
+  async with AsyncClient("https://api.devnet.solana.com") as client:
+      ...
+
+Health and connection:
+  client.is_connected()
+    Health check.
+
+Account reads:
+  client.get_balance(pubkey, commitment=None)
+    Get lamport balance.
+
+  client.get_account_info(pubkey, commitment=None, encoding="base64", data_slice=None)
+    Get raw account info.
+
+  client.get_account_info_json_parsed(pubkey, commitment=None)
+    Get parsed account info when parser exists.
+
+  client.get_multiple_accounts(pubkeys, commitment=None, encoding="base64", data_slice=None)
+    Get many accounts.
+
+  client.get_multiple_accounts_json_parsed(pubkeys, commitment=None)
+    Get many parsed accounts.
+
+Program account reads:
+  client.get_program_accounts(program_id, commitment=None, encoding="base64", data_slice=None, filters=None)
+    Get accounts owned by a program.
+
+  client.get_program_accounts_json_parsed(program_id, commitment=None, filters=None)
+    Get parsed program accounts.
+
+Block and slot reads:
+  client.get_block(slot, encoding="json", max_supported_transaction_version=None)
+    Get block data.
+
+  client.get_block_commitment(slot)
+    Get block commitment info.
+
+  client.get_block_height(commitment=None)
+    Get current block height.
+
+  client.get_block_time(slot)
+    Get estimated block time.
+
+  client.get_blocks(start_slot, end_slot=None)
+    Get confirmed block slots.
+
+  client.get_first_available_block()
+    Get first available block.
+
+  client.get_slot(commitment=None)
+    Get current slot.
+
+  client.get_slot_leader(commitment=None)
+    Get current slot leader.
+
+  client.get_slot_leaders(start, limit)
+    Get slot leaders for range.
+
+Cluster reads:
+  client.get_cluster_nodes()
+    Get cluster node info.
+
+  client.get_epoch_info(commitment=None)
+    Get current epoch info.
+
+  client.get_epoch_schedule()
+    Get epoch schedule.
+
+  client.get_genesis_hash()
+    Get genesis hash.
+
+  client.get_identity()
+    Get RPC node identity.
+
+  client.get_version()
+    Get node version.
+
+  client.get_recent_performance_samples(limit=None)
+    Get recent TPS/slot performance samples.
+
+  client.get_supply(commitment=None)
+    Get SOL supply.
+
+  client.get_transaction_count(commitment=None)
+    Get total transaction count.
+
+Inflation and staking reads:
+  client.get_inflation_governor(commitment=None)
+    Get inflation governor.
+
+  client.get_inflation_rate()
+    Get current inflation rate.
+
+  client.get_inflation_reward(addresses, epoch=None, commitment=None)
+    Get inflation rewards.
+
+  client.get_vote_accounts(commitment=None, vote_pubkey=None, keep_unstaked_delinquents=None, delinquent_slot_distance=None)
+    Get current and delinquent vote accounts.
+
+Fee and transaction status:
+  client.get_fee_for_message(message, commitment=None)
+    Estimate fee for a message.
+
+  client.get_latest_blockhash(commitment=None)
+    Get recent blockhash and last valid block height.
+
+  client.get_signature_statuses(signatures, search_transaction_history=False)
+    Get statuses for signatures.
+
+  client.get_signatures_for_address(account, before=None, until=None, limit=None, commitment=None)
+    Get signatures referencing an address.
+
+  client.get_transaction(signature, encoding="json", commitment=None, max_supported_transaction_version=None)
+    Get confirmed transaction details.
+
+Token RPC methods:
+  client.get_token_account_balance(token_account, commitment=None)
+    Get token account balance.
+
+  client.get_token_accounts_by_owner(owner, opts, commitment=None)
+    Get token accounts owned by wallet.
+
+  client.get_token_accounts_by_owner_json_parsed(owner, opts, commitment=None)
+    Get parsed token accounts owned by wallet.
+
+  client.get_token_accounts_by_delegate(delegate, opts, commitment=None)
+    Get token accounts delegated to a delegate.
+
+  client.get_token_accounts_by_delegate_json_parsed(delegate, opts, commitment=None)
+    Get parsed delegated token accounts.
+
+  client.get_token_largest_accounts(mint, commitment=None)
+    Get largest token accounts for a mint.
+
+  client.get_token_supply(mint, commitment=None)
+    Get token supply.
+
+Transaction sending and simulation:
+  client.request_airdrop(pubkey, lamports, commitment=None)
+    Request faucet lamports where supported.
+
+  client.send_raw_transaction(bytes_tx, opts=None)
+    Send signed serialized transaction bytes.
+
+  client.send_transaction(txn, *signers, opts=None, recent_blockhash=None)
+    Sign/send transaction, depending on transaction type and package version.
+
+  client.simulate_transaction(txn, sig_verify=False, commitment=None, replace_recent_blockhash=False, min_context_slot=None)
+    Simulate transaction without broadcasting.
+
+  client.confirm_transaction(signature, commitment=None, sleep_seconds=0.5, last_valid_block_height=None)
+    Poll confirmation.
+
+Validator/admin:
+  client.validator_exit()
+    Request validator exit on local/admin endpoint where supported.
+
+
+Solana JSON-RPC Methods
+-----------------------
+
+solana-py wraps JSON-RPC methods. You can also call JSON-RPC directly over HTTP POST.
+
+Account methods:
+  getAccountInfo
+  getBalance
+  getLargestAccounts
+  getMinimumBalanceForRentExemption
+  getMultipleAccounts
+  getProgramAccounts
+
+Block/slot methods:
+  getBlock
+  getBlockCommitment
+  getBlockHeight
+  getBlocks
+  getBlocksWithLimit
+  getBlockTime
+  getFirstAvailableBlock
+  getSlot
+  getSlotLeader
+  getSlotLeaders
+
+Cluster methods:
+  getClusterNodes
+  getEpochInfo
+  getEpochSchedule
+  getGenesisHash
+  getHealth
+  getIdentity
+  getRecentPerformanceSamples
+  getSupply
+  getVersion
+
+Transaction methods:
+  getFeeForMessage
+  getLatestBlockhash
+  getRecentPrioritizationFees
+  getSignaturesForAddress
+  getSignatureStatuses
+  getTransaction
+  getTransactionCount
+  isBlockhashValid
+  requestAirdrop
+  sendTransaction
+  simulateTransaction
+
+Token methods:
+  getTokenAccountBalance
+  getTokenAccountsByDelegate
+  getTokenAccountsByOwner
+  getTokenLargestAccounts
+  getTokenSupply
+
+Staking/inflation methods:
+  getInflationGovernor
+  getInflationRate
+  getInflationReward
+  getVoteAccounts
+
+WebSocket subscription methods:
+  accountSubscribe / accountUnsubscribe
+  blockSubscribe / blockUnsubscribe
+  logsSubscribe / logsUnsubscribe
+  programSubscribe / programUnsubscribe
+  rootSubscribe / rootUnsubscribe
+  signatureSubscribe / signatureUnsubscribe
+  slotSubscribe / slotUnsubscribe
+  slotsUpdatesSubscribe / slotsUpdatesUnsubscribe
+  voteSubscribe / voteUnsubscribe
+
+
+solders Key, Address, Message, and Transaction Functions
+--------------------------------------------------------
+
+Keypair:
+  Keypair()
+    Generate a new keypair.
+
+  Keypair.from_bytes(secret_bytes)
+    Load a keypair from bytes.
+
+  keypair.pubkey()
+    Get public key.
+
+  keypair.sign_message(message_bytes)
+    Sign arbitrary bytes.
+
+Pubkey:
+  Pubkey.from_string(address)
+    Parse base58 address.
+
+  Pubkey.new_unique()
+    Generate a unique pubkey for testing.
+
+  Pubkey.default()
+    Return default all-zero pubkey.
+
+  Pubkey.find_program_address(seeds, program_id)
+    Derive PDA and bump.
+
+  Pubkey.create_program_address(seeds, program_id)
+    Create PDA from seeds if valid.
+
+  Pubkey.create_with_seed(base, seed, program_id)
+    Create a seeded address.
+
+Hash:
+  Hash.from_string(value)
+    Parse blockhash.
+
+  Hash.default()
+    Default hash, useful only for tests/examples.
+
+Signature:
+  Signature.from_string(value)
+    Parse transaction signature.
+
+Instruction:
+  Instruction(program_id, data, accounts)
+    Build raw instruction.
+
+AccountMeta:
+  AccountMeta(pubkey, is_signer, is_writable)
+    Describe one account required by an instruction.
+
+Messages:
+  Message(instructions, payer)
+    Build legacy message.
+
+  MessageV0.try_compile(payer, instructions, address_lookup_table_accounts, recent_blockhash)
+    Build versioned v0 message.
+
+  to_bytes_versioned(message)
+    Serialize message bytes for signing.
+
+Transactions:
+  Transaction(signers, message, recent_blockhash)
+    Build legacy transaction.
+
+  Transaction.new_signed_with_payer(instructions, payer, signing_keypairs, recent_blockhash)
+    Build signed legacy transaction with payer.
+
+  VersionedTransaction(message, keypairs)
+    Build signed versioned transaction.
+
+  VersionedTransaction.from_bytes(data)
+    Parse serialized versioned transaction.
+
+  VersionedTransaction.populate(message, signatures)
+    Reconstruct transaction from message and signatures.
+
+
+solders System Program Instructions
+-----------------------------------
+
+Common functions:
+  transfer(TransferParams(...))
+    Transfer lamports.
+
+  transfer_many(from_pubkey, to_lamports)
+    Build many SOL transfers.
+
+  transfer_with_seed(TransferWithSeedParams(...))
+    Transfer from seeded account.
+
+  create_account(CreateAccountParams(...))
+    Create and fund account.
+
+  create_account_with_seed(CreateAccountWithSeedParams(...))
+    Create and fund seeded account.
+
+  assign(AssignParams(...))
+    Assign account owner program.
+
+  assign_with_seed(AssignWithSeedParams(...))
+    Assign seeded account.
+
+  allocate(AllocateParams(...))
+    Allocate account data space.
+
+  allocate_with_seed(AllocateWithSeedParams(...))
+    Allocate seeded account data space.
+
+Nonce account functions:
+  create_nonce_account(...)
+  create_nonce_account_with_seed(...)
+  initialize_nonce_account(InitializeNonceAccountParams(...))
+  advance_nonce_account(AdvanceNonceAccountParams(...))
+  withdraw_nonce_account(WithdrawNonceAccountParams(...))
+  authorize_nonce_account(AuthorizeNonceAccountParams(...))
+
+
+Compute Budget and Priority Fees in Python
+------------------------------------------
+
+Use compute budget instructions when transactions need priority fees or higher compute:
+
+  from solders.compute_budget import set_compute_unit_limit, set_compute_unit_price
+
+  set_compute_unit_limit(units)
+    Request a compute unit limit.
+
+  set_compute_unit_price(micro_lamports)
+    Set priority fee price per compute unit.
+
+CLI equivalent on many write commands:
+  --with-compute-unit-price <COMPUTE_UNIT_PRICE>
+
+
+Classic SPL Token CLI Capabilities
+----------------------------------
+
+Install:
+  cargo install spl-token-cli
+
+Basic commands:
+  spl-token create-token
+    Create a classic SPL Token mint.
+
+  spl-token create-token --decimals <N>
+    Create mint with custom decimals.
+
+  spl-token create-account <MINT>
+    Create associated token account for configured wallet.
+
+  spl-token create-account <MINT> <OWNER_OR_KEYPAIR>
+    Create token account for another owner/keypair.
+
+  spl-token accounts
+    List token accounts owned by wallet.
+
+  spl-token account-info <ACCOUNT_OR_MINT>
+    Show token account or mint info.
+
+  spl-token balance <MINT_OR_ACCOUNT>
+    Show balance.
+
+  spl-token supply <MINT>
+    Show mint supply.
+
+  spl-token mint <MINT> <AMOUNT> [RECIPIENT]
+    Mint tokens.
+
+  spl-token transfer <MINT> <AMOUNT> <RECIPIENT>
+    Transfer tokens.
+
+  spl-token transfer --fund-recipient <MINT> <AMOUNT> <RECIPIENT>
+    Transfer and create recipient ATA if needed.
+
+  spl-token burn <ACCOUNT_OR_MINT> <AMOUNT>
+    Burn tokens from owned account.
+
+  spl-token approve <ACCOUNT> <AMOUNT> <DELEGATE>
+    Approve delegate spending.
+
+  spl-token revoke <ACCOUNT>
+    Revoke delegate.
+
+  spl-token freeze <ACCOUNT>
+    Freeze token account if mint has freeze authority.
+
+  spl-token thaw <ACCOUNT>
+    Thaw frozen token account.
+
+  spl-token close <ACCOUNT>
+    Close empty token account and reclaim rent.
+
+  spl-token wrap <AMOUNT_SOL>
+    Wrap SOL into native token account.
+
+  spl-token unwrap <ACCOUNT>
+    Close wrapped SOL account and recover SOL.
+
+  spl-token authorize <MINT_OR_ACCOUNT> mint <NEW_AUTHORITY>
+    Change mint authority.
+
+  spl-token authorize <MINT_OR_ACCOUNT> freeze <NEW_AUTHORITY>
+    Change freeze authority.
+
+  spl-token authorize <TOKEN_ACCOUNT> owner <NEW_OWNER>
+    Change token account owner.
+
+  spl-token authorize <TOKEN_ACCOUNT> close <NEW_AUTHORITY>
+    Change close authority.
+
+  spl-token authorize <...> <AUTHORITY_TYPE> --disable
+    Permanently disable an authority.
+
+  spl-token create-multisig <M> <SIGNER_1> ... <SIGNER_N>
+    Create multisig authority.
+
+  spl-token gc
+    Garbage collect/close empty token accounts where supported.
+
+
+Classic SPL Token Python Instruction Helpers
+--------------------------------------------
+
+Program ID:
+  TOKEN_PROGRAM_ID
+
+ATA creation:
+  create_associated_token_account(payer, owner, mint)
+
+Initialize:
+  initialize_mint(...)
+  initialize_account(...)
+  initialize_multisig(...)
+  initialize_account2(...)
+  initialize_account3(...)
+  initialize_mint2(...)
+
+Mint and supply:
+  mint_to(MintToParams(program_id, mint, dest, mint_authority, amount))
+  burn(BurnParams(program_id, account, mint, owner, amount))
+  burn_checked(...)
+
+Transfers:
+  transfer(TransferParams(program_id, source, dest, owner, amount))
+  transfer_checked(TransferCheckedParams(program_id, source, mint, dest, owner, amount, decimals))
+
+Delegates:
+  approve(ApproveParams(...))
+  approve_checked(...)
+  revoke(RevokeParams(...))
+
+Freeze/thaw:
+  freeze_account(FreezeAccountParams(program_id, account, mint, authority))
+  thaw_account(ThawAccountParams(program_id, account, mint, authority))
+
+Close:
+  close_account(CloseAccountParams(program_id, account, dest, owner))
+
+Authorities:
+  set_authority(SetAuthorityParams(program_id, account, authority, current_authority, new_authority))
+
+Authority types:
+  AuthorityType.MINT_TOKENS
+  AuthorityType.FREEZE_ACCOUNT
+  AuthorityType.ACCOUNT_OWNER
+  AuthorityType.CLOSE_ACCOUNT
+
+Sync native SOL:
+  sync_native(SyncNativeParams(...))
+
+
+Token-2022 / Token Extensions Overview
+--------------------------------------
+
+Token-2022 is a superset of the classic Token Program:
+  - Classic token instructions are byte-compatible.
+  - New features are opt-in extensions.
+  - Extension state is stored after the base mint/account data.
+  - Many extensions must be enabled when creating the mint or account.
+  - Token-2022 uses a different program ID, so ATAs are different from classic token ATAs.
+
+Use Token-2022 with spl-token:
+  spl-token --program-id TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb <command>
+
+Python constant:
+  TOKEN_2022_PROGRAM_ID = Pubkey.from_string("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb")
+
+Token-2022 ATA derivation:
+  ata = Pubkey.find_program_address(
+      [bytes(owner), bytes(TOKEN_2022_PROGRAM_ID), bytes(mint)],
+      ASSOCIATED_TOKEN_PROGRAM_ID,
+  )[0]
+
+
+Token-2022 Core Operations
+--------------------------
+
+Create Token-2022 mint:
+  spl-token --program-id TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb create-token
+
+Create Token-2022 token account:
+  spl-token --program-id TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb create-account <MINT>
+
+Mint Token-2022 tokens:
+  spl-token --program-id TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb mint <MINT> <AMOUNT> [RECIPIENT]
+
+Transfer Token-2022 tokens:
+  spl-token --program-id TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb transfer <MINT> <AMOUNT> <RECIPIENT>
+
+Burn Token-2022 tokens:
+  spl-token --program-id TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb burn <ACCOUNT_OR_MINT> <AMOUNT>
+
+Freeze/thaw Token-2022 accounts:
+  spl-token --program-id TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb freeze <ACCOUNT>
+  spl-token --program-id TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb thaw <ACCOUNT>
+
+Close Token-2022 token account:
+  spl-token --program-id TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb close <ACCOUNT>
+
+
+Token-2022 Extensions
+---------------------
+
+Mint Close Authority:
+  Purpose:
+    Allows a mint account to be closed and rent reclaimed when supply is zero.
+  CLI:
+    spl-token --program-id TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb create-token --enable-close
+    spl-token close-mint <MINT>
+  Notes:
+    Closing/reinitializing mints with different extensions can create integration hazards.
+
+Transfer Fees:
+  Purpose:
+    Protocol-level transfer fee withheld from recipient account.
+  CLI:
+    spl-token --program-id TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb create-token \
+      --transfer-fee-basis-points <BPS> \
+      --transfer-fee-maximum-fee <MAX_FEE>
+    spl-token transfer <MINT> <AMOUNT> <RECIPIENT> --expected-fee <FEE>
+    spl-token withdraw-withheld-tokens <DESTINATION_ACCOUNT> <SOURCE_ACCOUNT>...
+    spl-token withdraw-withheld-tokens --include-mint <DESTINATION_ACCOUNT>
+  Notes:
+    Use transfer_checked or transfer_checked_with_fee. Plain unchecked transfer can fail.
+    Withheld fees can sit in token accounts or be harvested to the mint.
+
+Default Account State:
+  Purpose:
+    Makes newly created accounts initialized or frozen by default.
+  CLI:
+    spl-token --program-id TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb create-token \
+      --enable-freeze --default-account-state frozen
+    spl-token update-default-account-state <MINT> initialized
+    spl-token update-default-account-state <MINT> frozen
+  Notes:
+    Useful for permissioned tokens where accounts must be thawed before use.
+
+Immutable Owner:
+  Purpose:
+    Prevents token account owner reassignment.
+  CLI:
+    spl-token create-account <MINT> --immutable
+  Notes:
+    Associated token accounts for Token-2022 are always immutable.
+
+Non-Transferable Tokens:
+  Purpose:
+    Soulbound/non-transferable tokens. Holders can still burn/close where allowed.
+  CLI:
+    spl-token --program-id TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb create-token --enable-non-transferable
+
+Required Memo on Transfer:
+  Purpose:
+    Incoming transfers to the account must include a memo instruction immediately before transfer.
+  CLI:
+    spl-token enable-required-transfer-memos <TOKEN_ACCOUNT>
+    spl-token disable-required-transfer-memos <TOKEN_ACCOUNT>
+    spl-token transfer <MINT> <AMOUNT> <RECIPIENT> --with-memo "memo text"
+
+Reallocate:
+  Purpose:
+    Expands token account data to fit extensions added after account creation.
+  CLI:
+    spl-token enable-required-transfer-memos <TOKEN_ACCOUNT>
+  Notes:
+    The CLI may automatically add reallocation when enabling compatible account extensions.
+
+Interest-Bearing Mint:
+  Purpose:
+    Display/UI amount changes over time according to interest rate. Raw token amount does not change.
+  CLI:
+    spl-token --program-id TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb create-token --interest-rate <BPS>
+    spl-token set-interest-rate <MINT> <BPS>
+  Notes:
+    This is cosmetic accounting, not automatic minting.
+
+Permanent Delegate:
+  Purpose:
+    Mint-level delegate that can transfer or burn from any account for that mint.
+  CLI:
+    spl-token --program-id TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb create-token --enable-permanent-delegate
+    spl-token authorize <MINT> permanent-delegate <NEW_DELEGATE>
+  Notes:
+    Useful for regulated assets; dangerous if misused.
+
+CPI Guard:
+  Purpose:
+    Restricts token actions performed through cross-program invocation.
+  CLI:
+    spl-token enable-cpi-guard <TOKEN_ACCOUNT>
+    spl-token disable-cpi-guard <TOKEN_ACCOUNT>
+  Effects during CPI:
+    Transfer requires delegate authority.
+    Burn requires delegate authority.
+    Approve is prohibited.
+    Close destination must be account owner.
+    Set close authority is prohibited unless unsetting.
+    Set owner is always prohibited.
+
+Transfer Hook:
+  Purpose:
+    Calls a configured external hook program on transfers.
+  CLI:
+    spl-token --program-id TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb create-token --transfer-hook <PROGRAM_ID>
+    spl-token set-transfer-hook <MINT> <PROGRAM_ID>
+  Extra metas helper:
+    spl-transfer-hook create-extra-metas <PROGRAM_ID> <MINT_ID> [<ACCOUNT_PUBKEY>:<ROLE> ...]
+  Notes:
+    Requires a deployed program implementing the transfer-hook interface.
+
+Metadata Pointer:
+  Purpose:
+    Points a mint to canonical metadata account.
+  CLI:
+    spl-token --program-id TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb create-token --metadata-address <ADDRESS>
+  Notes:
+    Clients should verify that mint and metadata point to each other.
+
+Token Metadata Extension:
+  Purpose:
+    Stores token metadata directly in the Token-2022 mint account.
+  CLI:
+    spl-token --program-id TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb create-token --enable-metadata
+    spl-token initialize-metadata <MINT> <NAME> <SYMBOL> <URI> --update-authority <AUTHORITY>
+    spl-token update-metadata <MINT> name <NEW_NAME>
+    spl-token update-metadata <MINT> symbol <NEW_SYMBOL>
+    spl-token update-metadata <MINT> uri <NEW_URI>
+    spl-token update-metadata <MINT> <CUSTOM_FIELD> <VALUE>
+    spl-token update-metadata <MINT> <CUSTOM_FIELD> --remove
+
+Group Pointer:
+  Purpose:
+    Points a mint to canonical group configuration.
+  CLI:
+    spl-token --program-id TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb create-token --group-address <ADDRESS>
+
+Group:
+  Purpose:
+    Stores group configuration directly in mint. Useful for collection-like relationships.
+  CLI:
+    spl-token --program-id TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb create-token --enable-group
+    spl-token initialize-group <MINT> <MAX_SIZE> --update-authority <AUTHORITY>
+
+Member Pointer:
+  Purpose:
+    Points a member mint to canonical member configuration.
+  CLI:
+    spl-token --program-id TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb create-token --member-address <ADDRESS>
+
+Member:
+  Purpose:
+    Stores group membership configuration directly in mint.
+  CLI:
+    spl-token --program-id TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb create-token --enable-member
+    spl-token initialize-member <MINT> --update-authority <AUTHORITY>
+
+Scaled UI Amount:
+  Purpose:
+    Applies a UI multiplier to raw amounts. Raw token amount does not change.
+  CLI:
+    spl-token --program-id TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb create-token --ui-amount-multiplier <MULTIPLIER>
+    spl-token update-ui-amount-multiplier <MINT> <MULTIPLIER> [UNIX_TIMESTAMP]
+
+Pausable:
+  Purpose:
+    Pause mint, burn, and transfer activity.
+  CLI:
+    spl-token --program-id TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb create-token --enable-pause
+    spl-token pause <MINT>
+    spl-token resume <MINT>
+
+Confidential Transfers:
+  Purpose:
+    Hide transfer amounts with encrypted balances and zero-knowledge proof flows.
+  CLI examples vary by installed spl-token version:
+    spl-token --program-id TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb create-token --enable-confidential-transfers auto
+    spl-token --program-id TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb create-token --enable-confidential-transfers manual
+  Notes:
+    Must be enabled at mint creation.
+    Standard transfer is not the confidential transfer flow.
+    Some confidential operations require proof generation tooling.
+
+Confidential Transfer Fee:
+  Purpose:
+    Transfer fees for confidential transfers.
+  Notes:
+    Must be initialized with confidential transfer support.
+    Tooling support depends on installed spl-token and proof-generation packages.
+
+Confidential Mint/Burn:
+  Purpose:
+    Confidentially mint or burn amounts where supported by the Token-2022 program/tooling.
+  Notes:
+    Requires compatible client tooling and proof generation.
+
+
+Token-2022 Python Patterns
+--------------------------
+
+Create Token-2022 ATA:
+  TOKEN_2022_PROGRAM_ID = Pubkey.from_string("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb")
+  ASSOCIATED_TOKEN_PROGRAM_ID = Pubkey.from_string("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL")
+  ata = Pubkey.find_program_address(
+      [bytes(owner), bytes(TOKEN_2022_PROGRAM_ID), bytes(mint)],
+      ASSOCIATED_TOKEN_PROGRAM_ID,
+  )[0]
+
+Read Token-2022 token balance:
+  client.get_token_account_balance(ata)
+
+Find Token-2022 accounts by owner:
+  from solana.rpc.types import TokenAccountOpts
+  opts = TokenAccountOpts(program_id=TOKEN_2022_PROGRAM_ID)
+  client.get_token_accounts_by_owner(owner, opts)
+
+Check whether an account is Token-2022:
+  info = client.get_account_info(token_account).value
+  is_token_2022 = info.owner == TOKEN_2022_PROGRAM_ID
+
+Build classic-layout Token-2022 mint_to:
+  ix = mint_to(MintToParams(
+      program_id=TOKEN_2022_PROGRAM_ID,
+      mint=mint,
+      dest=destination_token_account,
+      mint_authority=authority.pubkey(),
+      amount=raw_amount,
+  ))
+
+Build classic-layout Token-2022 burn:
+  ix = burn(BurnParams(
+      program_id=TOKEN_2022_PROGRAM_ID,
+      account=token_account,
+      mint=mint,
+      owner=owner.pubkey(),
+      amount=raw_amount,
+  ))
+
+Build classic-layout Token-2022 set_authority:
+  ix = set_authority(SetAuthorityParams(
+      program_id=TOKEN_2022_PROGRAM_ID,
+      account=mint,
+      authority=AuthorityType.MINT_TOKENS,
+      current_authority=current_authority.pubkey(),
+      new_authority=new_authority_pubkey,
+  ))
+
+Build classic-layout Token-2022 thaw:
+  ix = thaw_account(ThawAccountParams(
+      program_id=TOKEN_2022_PROGRAM_ID,
+      account=token_account,
+      mint=mint,
+      authority=freeze_authority.pubkey(),
+  ))
+
+Send any built instruction:
+  blockhash = client.get_latest_blockhash().value.blockhash
+  msg = MessageV0.try_compile(
+      payer=payer.pubkey(),
+      instructions=[ix],
+      address_lookup_table_accounts=[],
+      recent_blockhash=blockhash,
+  )
+  tx = VersionedTransaction(msg, [payer])
+  sig = client.send_raw_transaction(bytes(tx), opts=TxOpts(skip_preflight=False))
+
+
+Metaplex Metadata vs Token-2022 Metadata
+----------------------------------------
+
+Metaplex Token Metadata:
+  - Separate metadata PDA account.
+  - Works with classic SPL Token and Token-2022.
+  - Widely supported by wallets, explorers, and marketplaces.
+  - Program ID: metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s
+
+Token-2022 Metadata Extension:
+  - Metadata stored directly in mint account.
+  - Only for Token-2022 mints created with metadata extension.
+  - Uses metadata pointer plus token metadata extension.
+
+Python can build Metaplex instructions manually with:
+  Instruction(program_id=METADATA_PROGRAM_ID, accounts=[...], data=...)
+
+For production metadata, prefer a maintained Metaplex Python client or build instructions from
+the current Metaplex program spec rather than guessing instruction bytes.
+
+
+Common Python CLI Script Patterns
+---------------------------------
+
+Load keypair:
+  import base58
+  payer = Keypair.from_bytes(base58.b58decode(PRIVATE_KEY_BASE58))
+
+Create RPC client:
+  client = Client(RPC_URL)
+
+Get SOL balance:
+  sol = client.get_balance(payer.pubkey()).value / 1_000_000_000
+
+Get token supply:
+  supply = client.get_token_supply(mint).value
+
+Get token account balance:
+  balance = client.get_token_account_balance(token_account).value
+
+Get latest blockhash:
+  blockhash = client.get_latest_blockhash().value.blockhash
+
+Compile/send transaction:
+  msg = MessageV0.try_compile(payer.pubkey(), instructions, [], blockhash)
+  tx = VersionedTransaction(msg, [payer])
+  result = client.send_raw_transaction(bytes(tx), opts=TxOpts(skip_preflight=False))
+
+Add memo:
+  Build a Memo program instruction before the transfer instruction.
+
+Add priority fee:
+  instructions = [
+      set_compute_unit_price(micro_lamports),
+      set_compute_unit_limit(units),
+      real_instruction,
+  ]
+
+Use retries:
+  Retry getting blockhash/quote/sending, but do not blindly re-send successful transactions.
+
+Use simulation:
+  client.simulate_transaction(tx)
+
+Confirm:
+  client.confirm_transaction(signature, commitment="confirmed")
+
+
+Production Safety Checklist
+---------------------------
+
+Never hard-code private keys in scripts.
+  Use environment variables, encrypted secret stores, hardware wallets, or keypair files.
+
+Use devnet first.
+  Test mint, transfer, burn, authority, and extension flows before mainnet.
+
+Use checked token instructions.
+  Prefer transfer_checked, mint_to_checked, burn_checked where available.
+
+For Token-2022 transfer fees:
+  Use transfer_checked_with_fee or CLI --expected-fee where available.
+
+For Token-2022 metadata/group/member pointers:
+  Verify both sides of pointer relationships when reading.
+
+For authority changes:
+  Understand irreversible --disable operations.
+
+For freeze authority:
+  Disabling freeze authority means frozen accounts may remain frozen forever.
+
+For close operations:
+  Token accounts usually must be empty.
+  Mint close requires Token-2022 MintCloseAuthority and zero supply.
+
+For program deploys:
+  Keep upgrade authority secure.
+  Consider final authority revocation only after audits and confidence.
+
+For RPC:
+  Public endpoints are rate-limited and not ideal for production.
+  Use a dedicated RPC provider for bots, trading, indexers, and production apps.
+
+
+Local Workspace Scripts
+-----------------------
+
+These scripts currently exist in this workspace and are examples of the patterns above:
+
+Roots/solswap.py
+  Interactive Jupiter SOL/USDC swap helper.
+  Uses Client, Keypair, Pubkey, VersionedTransaction, send_raw_transaction, Jupiter quote/swap APIs.
+
+Roots/burn.py
+  Burns classic SPL tokens.
+  Uses burn(BurnParams(...)).
+
+Roots/RootsMinter.py
+  Mints classic SPL tokens.
+  Uses create_associated_token_account and mint_to(MintToParams(...)).
+
+Roots/unfreeze.py
+  Thaws classic SPL token accounts.
+  Uses thaw_account(ThawAccountParams(...)).
+
+Roots/check.py
+  Checks token account balance.
+
+Roots/transferauthonly.py
+  Transfers Metaplex update authority manually.
+
+Roots/transferall.py
+  Transfers mint authority, freeze authority, and metadata update authority.
+
+Roots/MoveAuth.py
+  Transfers mint authority, freeze authority, and update authority with retries.
+
+Current workspace Token-2022 status:
+  Existing scripts use the classic SPL Token program ID.
+  To support Token-2022, update ATA derivation and instruction program_id to:
+    TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb
+  Extension-specific Token-2022 operations may need spl-token CLI or raw instruction builders.
