@@ -10,8 +10,8 @@ tokens.env.txt
 
 # Runtime state
 trading_history.json
-Roots/trading_history.json
-root reserve/
+wallet_actions/trading_history.json
+*reserve*/
 
 # Python
 __pycache__/

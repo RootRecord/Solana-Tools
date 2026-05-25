@@ -4,8 +4,6 @@ Local-first Python tooling for the Solana community.
 
 This project exists to help everyday people use Solana in a cheap, understandable, and secure manner on their own computer. The goal is simple: give users small, inspectable scripts for common Solana tasks instead of forcing them to rely on opaque hosted tools for every wallet, token, and authority operation.
 
-The toolkit is maintained as part of the RootRecord ecosystem. Visit [rootrecord.info](https://rootrecord.info) for RootRecord and [solana.rootrecord.info](https://solana.rootrecord.info) for the public Solana tools site.
-
 ## Support The Work
 
 If this helps you learn, audit, recover, or manage your own Solana assets, kind readers can donate here:
@@ -18,15 +16,15 @@ Donations support continued open tooling, documentation, and practical Solana ed
 
 ## What Is Included
 
-- `Roots/solswap.py` - an interactive Jupiter SOL/USDC swap assistant.
-- `Roots/RootsMinter.py` - mint tokens to a configured destination wallet.
-- `Roots/burn.py` - burn tokens from the configured owner account.
-- `Roots/check.py` - check the configured wallet token balance.
-- `Roots/unfreeze.py` - inspect and thaw configured token accounts.
-- `Roots/transferall.py` - transfer mint authority, freeze authority, and metadata update authority.
-- `Roots/transferauthonly.py` - transfer only Metaplex metadata update authority.
-- `Roots/MoveAuth.py` - authority transfer script with retry handling.
-- `Roots/config.py` - shared `.env` loader and typed Solana config helpers.
+- `wallet_actions/jupiter_swap_assistant.py` - an interactive Jupiter SOL/USDC swap assistant.
+- `wallet_actions/mint_tokens.py` - mint tokens to a configured destination wallet.
+- `wallet_actions/burn_tokens.py` - burn tokens from the configured owner account.
+- `wallet_actions/check_token_balance.py` - check the configured wallet token balance.
+- `wallet_actions/thaw_token_accounts.py` - inspect and thaw configured token accounts.
+- `wallet_actions/transfer_all_authorities.py` - transfer mint authority, freeze authority, and metadata update authority.
+- `wallet_actions/transfer_metadata_authority.py` - transfer only Metaplex metadata update authority.
+- `wallet_actions/transfer_authorities_retry.py` - authority transfer script with retry handling.
+- `wallet_actions/config.py` - shared `.env` loader and typed Solana config helpers.
 - `isolated_scripts/` - 113 standalone one-function Python scripts grouped by RPC, solders, system, SPL Token, Token-2022, Jupiter, Raydium, LaunchLab, Meteora, Orca, launchpad discovery, and metadata.
 - `ts_actions/` - TypeScript SDK actions for flows that need official SDKs, including Raydium LaunchLab create/buy/sell, Meteora DLMM swaps and positions, and Orca Whirlpool swaps.
 - `package.json` / `tsconfig.json` - optional Node SDK runtime for `ts_actions/`.
@@ -57,7 +55,7 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-The dashboard includes a built-in `.env` editor. On first launch, it opens a setup tutorial so users can paste the RPC URL, active wallet private key, and optional project values without manually editing files.
+The dashboard includes a built-in `.env` editor. On first launch, it opens a setup tutorial so users can paste the RPC URL, active signing wallet, optional managed wallet public keys, and optional managed token mints without manually editing files.
 
 If you prefer setup from PowerShell, copy the example env file and fill in local values:
 
@@ -65,7 +63,7 @@ If you prefer setup from PowerShell, copy the example env file and fill in local
 Copy-Item .env.example .env
 ```
 
-The real `.env` is ignored by git. Keep it local. When an existing `.env` is found, the dashboard confirms the active wallet public address before continuing.
+The real `.env` is ignored by git. Keep it local. When an existing `.env` is found, the dashboard confirms the active signing wallet, managed wallets, token mints, cluster, and RPC before continuing.
 
 Install the optional TypeScript SDK dependencies when you want SDK-only launchpad and LP execution:
 
@@ -82,13 +80,16 @@ Required runtime values live in `.env`:
 - `SOLANA_RPC_URL`
 - `SOLANA_ACTIVE_PRIVATE_KEY_BASE58`
 - `SOLANA_OLD_PRIVATE_KEY_BASE58`
-- `ROOTS_MINT_ADDRESS`
-- `ROOTS_OWNER_WALLET`
-- `ROOTS_DESTINATION_WALLET`
-- `ROOTS_NEW_AUTHORITY`
-- `ROOTS_TOKENS_TO_MINT`
-- `ROOTS_TOKEN_DECIMALS`
-- `ROOTS_UNFREEZE_ACCOUNTS`
+- `ACTIVE_WALLET_LABEL`
+- `MANAGED_WALLET_PUBLIC_KEYS`
+- `MANAGED_TOKEN_MINTS`
+- `DEFAULT_TOKEN_MINT`
+- `DEFAULT_OWNER_WALLET`
+- `DEFAULT_DESTINATION_WALLET`
+- `DEFAULT_NEW_AUTHORITY`
+- `DEFAULT_TOKENS_TO_MINT`
+- `DEFAULT_TOKEN_DECIMALS`
+- `DEFAULT_THAW_ACCOUNTS`
 - `SPL_TOKEN_PROGRAM_ID`
 - `TOKEN_2022_PROGRAM_ID`
 - `ASSOCIATED_TOKEN_PROGRAM_ID`
@@ -106,17 +107,17 @@ Use `.env.example` as the committed template. Put real secrets only in `.env`.
 
 ## Running Scripts
 
-Run scripts from the repository root:
+Run wallet action scripts from the repository root:
 
 ```powershell
-python .\Roots\check.py
-python .\Roots\RootsMinter.py
-python .\Roots\burn.py
-python .\Roots\unfreeze.py
-python .\Roots\transferall.py
-python .\Roots\transferauthonly.py
-python .\Roots\MoveAuth.py
-python .\Roots\solswap.py
+python .\wallet_actions\check_token_balance.py
+python .\wallet_actions\mint_tokens.py
+python .\wallet_actions\burn_tokens.py
+python .\wallet_actions\thaw_token_accounts.py
+python .\wallet_actions\transfer_all_authorities.py
+python .\wallet_actions\transfer_metadata_authority.py
+python .\wallet_actions\transfer_authorities_retry.py
+python .\wallet_actions\jupiter_swap_assistant.py
 ```
 
 ## Running Isolated Scripts
@@ -160,14 +161,14 @@ The dashboard gives everyday users a clean local interface for the same script a
 python .\solana_tools_dashboard.py
 ```
 
-The app discovers scripts in `isolated_scripts/`, `Roots/`, and `ts_actions/`, loads `.env`, runs each selected action in a hidden child process, and displays the full run in an in-app terminal. Transaction actions use a two-step flow:
+The app discovers scripts in `isolated_scripts/`, `wallet_actions/`, and `ts_actions/`, loads `.env`, runs each selected action in a hidden child process, and displays the full run in an in-app terminal. Transaction actions use a two-step flow:
 
 1. `Preview Selected` builds or quotes the action, prints estimated network cost, and broadcasts nothing.
 2. `Confirm/Execute Preview` reruns the same action with broadcast enabled only after user confirmation.
 
 For command-line use, scripts still refuse to broadcast until `SEND_TRANSACTION=true` is set and the user types `EXECUTE` when prompted.
 
-The `Edit .env` button opens the built-in editor at any time. It masks private key fields by default, can reveal them on request, writes `.env` locally, and displays the derived active wallet address after saving.
+The `Edit .env` button opens the built-in editor at any time. It masks private key fields by default, can reveal them on request, writes `.env` locally, and displays the derived active signing wallet plus any managed wallets or token mints after saving.
 
 The packaged exe is self-contained for Python dashboard use. TypeScript SDK actions require Node.js and the npm packages from `package.json`; the `Install/Repair Dependencies` button checks that setup and prompts before installing anything.
 
@@ -210,8 +211,6 @@ Solana is most useful when people can actually use it themselves. This repositor
 - Cheap: direct RPC and CLI-style workflows avoid unnecessary middlemen.
 - Educational: isolated scripts show one Solana concept at a time.
 - Self-custodial: secrets stay in your local `.env`, not in hosted dashboards.
-
-For more RootRecord work, visit [rootrecord.info](https://rootrecord.info). For public Solana tools and references, visit [solana.rootrecord.info](https://solana.rootrecord.info).
 
 ## Git Hygiene
 

@@ -4,21 +4,21 @@ from solders.transaction import VersionedTransaction
 from solders.message import MessageV0
 from solana.rpc.types import TxOpts
 from config import (
-    ROOTS_DESTINATION_WALLET,
-    ROOTS_MINT_ADDRESS,
-    ROOTS_TOKEN_DECIMALS,
-    ROOTS_TOKENS_TO_MINT,
+    DEFAULT_DESTINATION_WALLET,
+    DEFAULT_TOKEN_DECIMALS,
+    DEFAULT_TOKEN_MINT,
+    DEFAULT_TOKENS_TO_MINT,
     RPC_URL,
     keypair_from_env,
 )
 from transaction_confirm import preview_or_confirm
 
-print("✅ All-In-One Mint Script with Authority Check")
+print("✅ Token Mint Script with Authority Check")
 
 # ================== CONFIGURATION ==================
-MINT_ADDRESS = ROOTS_MINT_ADDRESS
-DESTINATION_WALLET = ROOTS_DESTINATION_WALLET
-TOKENS_TO_MINT = ROOTS_TOKENS_TO_MINT
+MINT_ADDRESS = DEFAULT_TOKEN_MINT
+DESTINATION_WALLET = DEFAULT_DESTINATION_WALLET
+TOKENS_TO_MINT = DEFAULT_TOKENS_TO_MINT
 # =====================================================
 
 def main():
@@ -40,7 +40,7 @@ def main():
             print("   You must transfer Mint Authority first from the old wallet.")
             return
 
-    raw_amount = int(TOKENS_TO_MINT * (10 ** ROOTS_TOKEN_DECIMALS))
+    raw_amount = int(TOKENS_TO_MINT * (10 ** DEFAULT_TOKEN_DECIMALS))
 
     from spl.token.instructions import mint_to, MintToParams, create_associated_token_account
     from spl.token.constants import TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID

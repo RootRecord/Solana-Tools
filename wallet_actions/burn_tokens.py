@@ -4,19 +4,19 @@ from solders.transaction import VersionedTransaction
 from solders.message import MessageV0
 from solana.rpc.types import TxOpts
 from config import (
-    ROOTS_MINT_ADDRESS,
-    ROOTS_OWNER_WALLET,
-    ROOTS_TOKEN_DECIMALS,
+    DEFAULT_OWNER_WALLET,
+    DEFAULT_TOKEN_DECIMALS,
+    DEFAULT_TOKEN_MINT,
     RPC_URL,
     keypair_from_env,
 )
 from transaction_confirm import preview_or_confirm
 
-print("🔥 Roots Token Burn Script\n")
+print("🔥 Token Burn Script\n")
 
 # ================== CONFIGURATION ==================
-MINT_ADDRESS = ROOTS_MINT_ADDRESS
-OWNER_WALLET = ROOTS_OWNER_WALLET
+MINT_ADDRESS = DEFAULT_TOKEN_MINT
+OWNER_WALLET = DEFAULT_OWNER_WALLET
 # =====================================================
 
 def main():
@@ -36,7 +36,7 @@ def main():
         print("Invalid number!")
         return
 
-    raw_amount = int(amount * (10 ** ROOTS_TOKEN_DECIMALS))
+    raw_amount = int(amount * (10 ** DEFAULT_TOKEN_DECIMALS))
     print(f"🔥 Burning {amount} tokens ({raw_amount} raw units)...")
 
     from spl.token.instructions import burn, BurnParams

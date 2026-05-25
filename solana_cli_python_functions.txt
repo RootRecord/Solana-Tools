@@ -1432,32 +1432,32 @@ Local Workspace Scripts
 
 These scripts currently exist in this workspace and are examples of the patterns above:
 
-Roots/solswap.py
+wallet_actions/jupiter_swap_assistant.py
   Interactive Jupiter SOL/USDC swap helper.
   Uses Client, Keypair, Pubkey, VersionedTransaction, send_raw_transaction, Jupiter quote/swap APIs.
 
-Roots/burn.py
+wallet_actions/burn_tokens.py
   Burns classic SPL tokens.
   Uses burn(BurnParams(...)).
 
-Roots/RootsMinter.py
+wallet_actions/mint_tokens.py
   Mints classic SPL tokens.
   Uses create_associated_token_account and mint_to(MintToParams(...)).
 
-Roots/unfreeze.py
+wallet_actions/thaw_token_accounts.py
   Thaws classic SPL token accounts.
   Uses thaw_account(ThawAccountParams(...)).
 
-Roots/check.py
+wallet_actions/check_token_balance.py
   Checks token account balance.
 
-Roots/transferauthonly.py
+wallet_actions/transfer_metadata_authority.py
   Transfers Metaplex update authority manually.
 
-Roots/transferall.py
+wallet_actions/transfer_all_authorities.py
   Transfers mint authority, freeze authority, and metadata update authority.
 
-Roots/MoveAuth.py
+wallet_actions/transfer_authorities_retry.py
   Transfers mint authority, freeze authority, and update authority with retries.
 
 Current workspace Token-2022 status:

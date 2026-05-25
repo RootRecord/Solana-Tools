@@ -5,9 +5,9 @@ from solders.transaction import VersionedTransaction
 from solders.message import MessageV0
 from solana.rpc.types import TxOpts
 from config import (
+    DEFAULT_NEW_AUTHORITY,
+    DEFAULT_TOKEN_MINT,
     METADATA_PROGRAM_ID,
-    ROOTS_MINT_ADDRESS,
-    ROOTS_NEW_AUTHORITY,
     RPC_URL,
     keypair_from_env,
 )
@@ -16,8 +16,8 @@ from transaction_confirm import preview_or_confirm
 
 print("✅ Update Authority Transfer Script")
 
-MINT = ROOTS_MINT_ADDRESS
-NEW_AUTH = ROOTS_NEW_AUTHORITY
+MINT = DEFAULT_TOKEN_MINT
+NEW_AUTH = DEFAULT_NEW_AUTHORITY
 METADATA_PID = METADATA_PROGRAM_ID
 
 def main():

@@ -2,16 +2,16 @@ from solders.pubkey import Pubkey
 from solana.rpc.api import Client
 from config import (
     ASSOCIATED_TOKEN_PROGRAM_ID,
-    ROOTS_MINT_ADDRESS,
-    ROOTS_OWNER_WALLET,
+    DEFAULT_OWNER_WALLET,
+    DEFAULT_TOKEN_MINT,
     RPC_URL,
     SPL_TOKEN_PROGRAM_ID,
 )
 
 print("✅ Balance Checker")
 
-MINT = ROOTS_MINT_ADDRESS
-WALLET = ROOTS_OWNER_WALLET
+MINT = DEFAULT_TOKEN_MINT
+WALLET = DEFAULT_OWNER_WALLET
 
 client = Client(RPC_URL)
 

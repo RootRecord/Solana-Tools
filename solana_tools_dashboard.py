@@ -27,10 +27,14 @@ FIELD_HELP = {
     "SOLANA_CLUSTER": "devnet or mainnet-beta.",
     "SOLANA_ACTIVE_PRIVATE_KEY_BASE58": "Base58 private key for the wallet that signs actions.",
     "SOLANA_OLD_PRIVATE_KEY_BASE58": "Optional previous authority wallet for authority transfer actions.",
-    "ROOTS_MINT_ADDRESS": "Optional token mint used by Roots token actions.",
-    "ROOTS_OWNER_WALLET": "Optional owner wallet for Roots token actions.",
-    "ROOTS_DESTINATION_WALLET": "Optional destination wallet for mint/transfer actions.",
-    "ROOTS_NEW_AUTHORITY": "Optional new authority wallet for authority transfer actions.",
+    "ACTIVE_WALLET_LABEL": "Friendly label for the active signing wallet.",
+    "MANAGED_WALLET_PUBLIC_KEYS": "Optional comma-separated public keys for wallets you watch or manage.",
+    "MANAGED_TOKEN_MINTS": "Optional comma-separated token mint addresses you watch or manage.",
+    "DEFAULT_TOKEN_MINT": "Default mint used by token actions.",
+    "DEFAULT_OWNER_WALLET": "Default owner wallet used by token balance/burn actions.",
+    "DEFAULT_DESTINATION_WALLET": "Default destination wallet for mint/transfer actions.",
+    "DEFAULT_NEW_AUTHORITY": "Default new authority wallet for authority transfer actions.",
+    "DEFAULT_THAW_ACCOUNTS": "Comma-separated token accounts to thaw.",
     "INPUT_MINT": "Default input mint for swap/LP actions.",
     "OUTPUT_MINT": "Default output mint for swap/LP actions.",
     "RAW_AMOUNT": "Default raw token amount, in smallest units.",
@@ -160,11 +164,25 @@ def wallet_pubkey_from_private_key(private_key_base58: str) -> str:
 
 def active_wallet_summary(values: dict[str, str]) -> str:
     wallet = wallet_pubkey_from_private_key(values.get("SOLANA_ACTIVE_PRIVATE_KEY_BASE58", ""))
+    label = values.get("ACTIVE_WALLET_LABEL", "Active Wallet") or "Active Wallet"
     rpc = values.get("SOLANA_RPC_URL", "(not set)")
     cluster = values.get("SOLANA_CLUSTER", "(not set)")
+    managed_wallets = [item.strip() for item in values.get("MANAGED_WALLET_PUBLIC_KEYS", "").split(",") if item.strip()]
+    managed_tokens = [item.strip() for item in values.get("MANAGED_TOKEN_MINTS", "").split(",") if item.strip()]
+    lines = []
     if wallet:
-        return f"Active wallet: {wallet}\nCluster: {cluster}\nRPC: {rpc}"
-    return f"Active wallet: could not be derived from SOLANA_ACTIVE_PRIVATE_KEY_BASE58\nCluster: {cluster}\nRPC: {rpc}"
+        lines.append(f"{label}: {wallet}")
+    else:
+        lines.append("Active signing wallet: could not be derived from SOLANA_ACTIVE_PRIVATE_KEY_BASE58")
+    if managed_wallets:
+        lines.append("Managed/watch wallets:")
+        lines.extend(f"  - {item}" for item in managed_wallets)
+    if managed_tokens:
+        lines.append("Managed/watch token mints:")
+        lines.extend(f"  - {item}" for item in managed_tokens)
+    lines.append(f"Cluster: {cluster}")
+    lines.append(f"RPC: {rpc}")
+    return "\n".join(lines)
 
 
 def run_script_mode(script_path: str) -> int:
@@ -321,7 +339,7 @@ def discover_actions() -> list[Action]:
     seen: set[str] = set()
     seen_labels: set[str] = set()
     for root in roots:
-        for folder_name, extension in [("isolated_scripts", "*.py"), ("Roots", "*.py"), ("ts_actions", "*.ts")]:
+        for folder_name, extension in [("isolated_scripts", "*.py"), ("wallet_actions", "*.py"), ("ts_actions", "*.ts")]:
             folder = root / folder_name
             if not folder.exists():
                 continue
@@ -497,7 +515,7 @@ class Dashboard:
                 APP_NAME,
                 "Welcome to Solana Tools.\n\n"
                 "Let's set up your local .env file so you do not need to edit anything by hand. "
-                "You can paste your RPC URL and active wallet private key in the next window.",
+                "You can paste your RPC URL, active signing wallet, and any additional wallets or token mints you manage in the next window.",
             )
             self.open_env_editor(first_run=True)
             return
@@ -507,7 +525,7 @@ class Dashboard:
             APP_NAME,
             "Solana Tools found an existing .env file.\n\n"
             f"{summary}\n\n"
-            "Use this wallet and configuration?",
+            "Use this wallet/token configuration?",
         ):
             self.write_terminal(f"\n.env confirmed by user.\n{summary}\n")
         else:

@@ -12,8 +12,8 @@ for path in Path("isolated_scripts").rglob("*.py"):
     datas.append((str(path), str(path.parent)))
 for path in Path("ts_actions").rglob("*.ts"):
     datas.append((str(path), str(path.parent)))
-for path in Path("Roots").glob("*.py"):
-    datas.append((str(path), "Roots"))
+for path in Path("wallet_actions").glob("*.py"):
+    datas.append((str(path), "wallet_actions"))
 for path in [
     Path("install_dependencies.py"),
     Path("isolated_scripts/README.md"),
